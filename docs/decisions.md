@@ -202,3 +202,12 @@ part of a mixed message is ignored silently.
 Six descriptions name a different brand from the product. Passing them on would have the assistant
 call a Yamaha kit a Pearl Export, so `get_product_details` leaves them out for these products. The
 list of IDs is specific to this dataset; a real catalog would need the data fixed at the source.
+
+## 023. Streamlit as a thin interface
+
+Streamlit gives a working chat with little code, which keeps the effort on the agent. `app.py` only
+displays messages and calls `ConversationService`, so another interface could replace it, as
+`main.py` shows. Amounts are escaped before display, because Streamlit reads the text between two
+"$" signs as a math formula. Sessions live in memory and are lost on restart, which is fine for a
+demo. `server.headless` is set so that a first run does not stop to ask for an email, which also
+means the browser does not open by itself.

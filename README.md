@@ -5,9 +5,8 @@ Campo Grande/MS, built for the Artefact AI Engineer technical challenge.
 
 ## Status
 
-Work in progress. The datasets, the read-only data layer, the catalog, policy and order tools and
-the conversation workflow exist so far, but there is no user interface yet. Automated tests use a
-fake model. This README will document the architecture, known limitations and
+Work in progress. The agent works through a Streamlit chat and a command-line chat, and automated
+tests use a fake model. Example conversations and the final documentation are still to come. This README will document the architecture, known limitations and
 AI-assisted development workflow as each part is completed. Decisions made so far are in
 [docs/decisions.md](docs/decisions.md).
 
@@ -35,12 +34,27 @@ python -m pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Then create the local database. The command can be repeated: it rebuilds the database from the CSV
-files without duplicating data.
+Fill in `OPENAI_API_KEY` in `.env`. Then create the local database. The command can be repeated: it
+rebuilds the database from the CSV files without duplicating data.
 
 ```bash
 python scripts/seed_db.py
 ```
+
+## Running
+
+```bash
+streamlit run app.py
+```
+
+Then open <http://localhost:8501>. For a quick check without a browser, there is also a
+command-line chat:
+
+```bash
+python main.py
+```
+
+Both call the OpenAI API, which costs a small amount per message.
 
 ## Checks
 

@@ -1,0 +1,6 @@
+[server]
+# Skips the email prompt that blocks the terminal the first time Streamlit runs.
+headless = true
+
+[browser]
+gatherUsageStats = false
