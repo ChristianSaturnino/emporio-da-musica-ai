@@ -139,3 +139,53 @@ This is a simulated check and not authentication. The repository is public and i
 customers, there is no limit on attempts, and customers 11 and 43 share an email. Production would
 need real login or one-time codes, session-based authorization, rate limiting, auditing and a
 private database.
+
+## 017. The model interprets and writes, Python decides
+
+Each turn follows one fixed path through four LangGraph nodes: understand, validate, execute and
+respond. The model is called in the first and, when needed, in the last. Validation and tool
+execution are plain Python, and there is no autonomous tool loop. Each intent maps to one handler in
+a closed table, so there is no way for the model to reach anything else, such as arbitrary SQL or a
+customer list. LangGraph is more than this linear flow strictly needs, but it makes the failure
+routes explicit and each node testable.
+
+## 018. The customer's email never reaches the model
+
+Python extracts the email with a regular expression and replaces it with a placeholder before
+anything else happens. The history only holds the masked text, and the address itself lives for one
+turn, so a second order lookup asks for it again. The schema has no email field, which also means the
+model cannot make one up. Replying to a pending request is handled in code, even if the model
+misreads the message.
+
+The same idea applies to products: the model names a product or says "esse", and references resolve
+against the session state. A reference is only updated by an unequivocal result, so several search
+results or an ambiguous name leave "esse" unresolved and the assistant asks.
+
+## 019. Fixed answers when there is nothing to write about
+
+Refusals, requests for missing data, "not found" and greetings are fixed messages. They spend no
+second call and cannot invent anything. Only results with facts go to the model.
+
+## 020. The reply is checked after it is written
+
+The prompt tells the model not to invent values, but that is a request and not a guarantee. After
+writing, every R$ amount, tracking code and email address in the reply must appear in the tool
+results or in the customer's message, or the reply is discarded for a safe message. This cannot
+catch everything, such as a wrong date or a false statement in words, but it covers the most damaging
+errors. It also blocks installment values calculated by the model, which is intended, as the manual's
+rules for them are ambiguous.
+
+## 021. Failures end in a message, and limits protect the budget
+
+Invalid model output is retried once and then ends in a conservative message. One invalid slot stops
+the whole turn instead of running part of it. A provider failure, a reply cut off by the token cap
+and a failing tool each have their own message, and logs carry error types rather than text that
+could hold customer data. Calls have token caps, a timeout and a single transport retry, history is
+limited to 6 messages, and long or empty messages are answered without calling the model. Tests use
+a fake model, so they run with no key and no cost.
+
+## 022. Products with an unreliable description
+
+Six descriptions name a different brand from the product. Passing them on would have the assistant
+call a Yamaha kit a Pearl Export, so `get_product_details` leaves them out for these products. The
+list of IDs is specific to this dataset; a real catalog would need the data fixed at the source.

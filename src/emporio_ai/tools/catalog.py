@@ -23,6 +23,10 @@ MAX_RESULTS = 5
 MAX_ALTERNATIVES = 3
 MAX_CANDIDATES = 5
 
+# The descriptions of these products name a different brand from the product itself, so they are
+# not passed on: a "Yamaha" drum kit would be presented as a "Pearl Export".
+_UNRELIABLE_DESCRIPTIONS = frozenset({135, 137, 139, 140, 142, 144})
+
 
 def _to_offer(repo: Repository, product: Product) -> ProductOffer:
     availability = availability_of(product.status, product.stock_quantity)
@@ -176,7 +180,11 @@ def get_product_details(
         status=LookupStatus.FOUND,
         details=ProductDetails(
             offer=offer,
-            description=lookup.product.description,
+            description=(
+                None
+                if lookup.product.product_id in _UNRELIABLE_DESCRIPTIONS
+                else lookup.product.description
+            ),
             stock_quantity=lookup.product.stock_quantity,
             specs=lookup.product.specs,
             alternatives=() if is_available else _find_alternatives(repo, lookup.product),

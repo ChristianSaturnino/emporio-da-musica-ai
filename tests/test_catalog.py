@@ -224,6 +224,12 @@ def test_details_of_available_product_have_no_alternatives(repo):
     assert result.details.alternatives == ()
 
 
+@pytest.mark.parametrize("product_id", [135, 137, 139, 140, 142, 144])
+def test_description_naming_another_brand_is_not_passed_on(repo, product_id):
+    assert repo.get_product(product_id).description
+    assert get_product_details(repo, product_id=product_id).details.description is None
+
+
 def test_giannini_gf3d_is_active_but_unavailable(repo):
     result = get_product_details(repo, name="Giannini GF-3D")
     assert result.status is LookupStatus.FOUND

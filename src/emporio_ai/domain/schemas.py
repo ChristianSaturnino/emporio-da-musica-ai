@@ -192,3 +192,43 @@ class OrderStatusResult(Record):
     access: OrderAccess
     order: OrderSummary | None = None
     notes: tuple[str, ...] = ()
+
+
+class IntentType(StrEnum):
+    PRODUCT_SEARCH = "product_search"
+    PRODUCT_DETAILS = "product_details"
+    PRODUCT_PRICE = "product_price"
+    ORDER_STATUS = "order_status"
+    POLICY_QUESTION = "policy_question"
+    STORE_INFORMATION = "store_information"
+    GREETING = "greeting"
+    OUT_OF_SCOPE = "out_of_scope"
+
+
+# ActionRequest and ParsedTurn are sent to the model as a schema, docstrings included, so they are
+# documented in comments to keep every call small.
+#
+# ActionRequest has no customer email and no product ID on purpose. Python extracts the email before
+# the model sees the message, and product references resolve against the session state.
+#
+# In ParsedTurn, only optional slots have a default, as the provider's strict schema rejects others.
+
+
+class ActionRequest(Record):
+    intent: IntentType
+    product_query: str | None = None
+    refers_to_previous_product: bool | None = None
+    category: str | None = None
+    max_price_brl: Decimal | None = None
+    in_stock: bool | None = None
+    on_promotion: bool | None = None
+    only_cheapest: bool | None = None
+    order_id: int | None = None
+    policy_topic: str | None = None
+    store_topic: StoreTopic | None = None
+
+
+class ParsedTurn(Record):
+    actions: list[ActionRequest]
+    needs_clarification: bool
+    clarification_question: str | None = None

@@ -7,3 +7,15 @@ class DatasetError(Exception):
 
 class DatabaseNotFoundError(Exception):
     """The SQLite database has not been created yet."""
+
+
+class ConfigurationError(Exception):
+    """A required setting is missing, such as the API key."""
+
+
+class LLMUnavailableError(Exception):
+    """The model provider could not be reached or refused the request."""
+
+
+class LLMOutputError(Exception):
+    """The model answered, but its output cannot be used."""

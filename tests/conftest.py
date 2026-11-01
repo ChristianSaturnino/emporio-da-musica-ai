@@ -2,6 +2,7 @@ import pytest
 
 from emporio_ai.config import get_settings
 from emporio_ai.data.loader import build_database
+from emporio_ai.data.policy_index import build_policy_index
 from emporio_ai.data.repository import Repository
 
 
@@ -20,3 +21,8 @@ def db_path(data_dir, tmp_path_factory):
 @pytest.fixture(scope="session")
 def repo(db_path):
     return Repository(db_path)
+
+
+@pytest.fixture(scope="session")
+def policy_index(data_dir):
+    return build_policy_index(data_dir / "politicas_da_loja.pdf")

@@ -14,6 +14,12 @@ def round_money(amount: Decimal) -> Decimal:
     return amount.quantize(_CENT, rounding=ROUND_HALF_UP)
 
 
+def format_brl(amount: Decimal) -> str:
+    """Format an amount the Brazilian way: R$ 2.199,00."""
+    formatted = f"{round_money(amount):,.2f}"
+    return "R$ " + formatted.translate(str.maketrans(",.", ".,"))
+
+
 def apply_discount(price: Decimal, percent: int) -> Decimal:
     return round_money(price * (100 - percent) / 100)
 

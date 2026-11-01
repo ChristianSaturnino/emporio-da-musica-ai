@@ -5,8 +5,9 @@ Campo Grande/MS, built for the Artefact AI Engineer technical challenge.
 
 ## Status
 
-Work in progress. The challenge datasets, the read-only data layer and the catalog, policy and order
-tools exist so far: the agent is not implemented yet. This README will document the architecture, known limitations and
+Work in progress. The datasets, the read-only data layer, the catalog, policy and order tools and
+the conversation workflow exist so far, but there is no user interface yet. Automated tests use a
+fake model. This README will document the architecture, known limitations and
 AI-assisted development workflow as each part is completed. Decisions made so far are in
 [docs/decisions.md](docs/decisions.md).
 
@@ -67,7 +68,7 @@ Known quirks in the supplied data, kept as they are:
   is `discontinued` with 13 units.
 - Six descriptions name a different brand from the product name (products 135, 137, 139, 140, 142
   and 144), and product 142 is described with 88 keys while its specs say 61. The name and the
-  structured fields are treated as authoritative.
+  structured fields are treated as authoritative, and those six descriptions are not shown.
 - The policy manual contradicts itself in places, such as two different WhatsApp numbers. See
   decision 014 in [docs/decisions.md](docs/decisions.md) for how each case is handled.
 - The manual mentions more than 300 instruments, including wind and orchestral ones. The product
