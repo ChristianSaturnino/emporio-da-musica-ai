@@ -17,6 +17,7 @@ from emporio_ai.domain.schemas import (
     ProductPriceResult,
     ProductSearchResult,
 )
+from emporio_ai.domain.scope import find_unsold_item
 
 MAX_RESULTS = 5
 MAX_ALTERNATIVES = 3
@@ -79,7 +80,13 @@ def search_products(
     Browsing without a term only shows products that can be bought. A term may name a specific
     product, so its matches are returned even if unavailable, marked as such, unless
     only_available is set.
+
+    The store does not sell accessories, so asking for one reports that instead of searching.
     """
+    unsold_item = find_unsold_item(f"{term or ''} {category or ''}")
+    if unsold_item:
+        return ProductSearchResult(unsold_item=unsold_item)
+
     category_ids = None
     if category and category.strip():
         category_ids = _match_categories(repo, category, include_description=True)

@@ -125,9 +125,33 @@ def test_category_found_through_its_description_has_no_products(repo):
 
 
 def test_unknown_category_is_flagged(repo):
-    result = search_products(repo, category="pedal de distorção")
+    result = search_products(repo, category="theremin")
     assert result.unknown_category
     assert result.products == ()
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"term": "cordas"},
+        {"category": "cordas"},
+        {"term": "pedal de distorção"},
+        {"category": "amplificadores"},
+        {"term": "palheta para violão"},
+    ],
+)
+def test_accessories_are_reported_instead_of_searched(repo, kwargs):
+    result = search_products(repo, **kwargs)
+    assert result.unsold_item
+    assert result.products == ()
+    assert not result.unknown_category
+
+
+def test_instruments_described_by_their_strings_are_not_accessories(repo):
+    result = search_products(repo, term="violão 7 cordas")
+    assert result.unsold_item is None
+    assert 112 in ids(result)
+    assert search_products(repo, category="cordas orquestrais").unsold_item is None
 
 
 # Search by term

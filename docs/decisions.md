@@ -76,3 +76,50 @@ can ask. This keeps a wrong product from being priced or carried into the next t
 The manual (section 7.3) asks for similar options when a product is unavailable. "Similar" is
 defined narrowly as available products of the same category, closest in price. The data has no
 explicit successor relation, so none is claimed.
+
+## 011. Policy sections follow the PDF outline
+
+The extracted text has no reliable line structure, but the PDF has an outline with exact titles and
+pages. Splitting along it means a condition is never cut off from its deadline, which arbitrary
+chunks could do. A title missing from the text stops the build instead of producing bad sections.
+
+## 012. Lexical retrieval instead of embeddings
+
+The manual has 8 pages and clear headings, so word matching is enough and each result can be
+explained. Words are compared by their first 5 letters, because Portuguese verbs have too many forms
+to list ("entregam", "entrega"). Each word scores 3 if found in the title or in hand-written
+keywords, and 1 if found only in the text. A section needs at least 2 points, so one common word is
+not treated as evidence and an uncovered question returns nothing instead of the closest section.
+
+Retrieval alone misses paraphrases that share no words with the manual, such as "mudei de ideia". A
+small set of new questions, written by the author and not a benchmark, scored 22 of 26 before the
+misses were fixed. The assistant is meant to search with a topic extracted by the model instead of
+the raw message, which should reduce these misses; that still has to be measured. The keyword lists
+are manual work that would not scale to a much larger document, where embeddings would be next.
+
+## 013. Policy text is data
+
+Sections are returned as reference data and nothing in the code acts on their content. The prompt,
+which does not exist yet, has to keep this text apart from its instructions.
+
+## 014. Ambiguities in the manual are flagged, not resolved silently
+
+Notes written in code travel with the sections they refer to, and tests check that each note still
+matches the manual. The conservative reading always wins:
+
+- The two phone numbers are both given. The email is taken from the cover, as the one in section 1.2
+  has an accent in the domain.
+- Section 3.1 prevails over the R$ 100.00 minimum in the section 3 table, as it is more specific.
+- An order of exactly R$ 500.00 falls between "acima" and "abaixo", so free shipping is not promised.
+- The 30-day exchange and the 90-day legal warranty are both presented, and no right is denied.
+- Withdrawal needs the purchase channel and the delivery date, so eligibility is not asserted.
+- The manual suggests partner stores but lists none, so none is named.
+
+## 015. Accessories are blocked in code
+
+The store only sells instruments, so asking the product search for an accessory reports that instead
+of searching. Without this, "cordas" would resolve to the "Cordas Orquestrais" category. The check
+applies to product searches only: "cordas" in a warranty question is not a purchase request. The
+manual's list is given as examples, so a few other common accessories are included. Phrases like
+"7 cordas" are recognized as instruments, but a wording like "violão de cordas de aço" would still be
+reported as an accessory.

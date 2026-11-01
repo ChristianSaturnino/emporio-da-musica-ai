@@ -1,5 +1,6 @@
 """Text normalization shared by data loading and lookups."""
 
+import re
 import unicodedata
 
 _PLURAL_SUFFIXES = (("oes", "ao"), ("aes", "ao"), ("ais", "al"), ("eis", "el"), ("s", ""))
@@ -31,6 +32,11 @@ def _stem(token: str) -> str:
 def tokenize(text: str) -> list[str]:
     """Split text into normalized singular words. Other punctuation stays in the token."""
     return [_stem(word) for word in normalize_text(text).translate(_WORD_SEPARATORS).split()]
+
+
+def word_tokens(text: str) -> list[str]:
+    """Split text into normalized singular words, dropping all punctuation."""
+    return [_stem(word) for word in re.findall(r"\w+", normalize_text(text))]
 
 
 def build_search_text(*texts: str) -> str:
