@@ -49,6 +49,8 @@ MAX_HISTORY_MESSAGES = 6
 
 # Identifiers and search internals that the reply has no use for.
 _HIDDEN_FACT_FIELDS = frozenset({"product_id", "keywords"})
+_NON_REQUESTS = frozenset({IntentType.GREETING, IntentType.OUT_OF_SCOPE})
+_PRODUCT_LOOKUPS = frozenset({IntentType.PRODUCT_DETAILS, IntentType.PRODUCT_PRICE})
 
 
 def _to_facts(value: Any) -> Any:
@@ -202,6 +204,37 @@ def _is_valid(action: ActionRequest) -> bool:
     return action.order_id is None or action.order_id > 0
 
 
+def _as_details(action: ActionRequest) -> ActionRequest:
+    return action.model_copy(update={"intent": IntentType.PRODUCT_DETAILS})
+
+
+def _clean_actions(actions: list[ActionRequest]) -> list[ActionRequest]:
+    """Remove the padding seen from the real model, which tends to fill both action slots.
+
+    An order question came with an extra out_of_scope that made the reply refuse itself, and a
+    single search came twice. A greeting or refusal only stands when nothing else was asked, and
+    a price and details request for one product becomes details, which include the price.
+    """
+    requests = [a for a in actions if a.intent not in _NON_REQUESTS] or actions[:1]
+    cleaned: list[ActionRequest] = []
+    for action in requests:
+        twin = next(
+            (
+                index
+                for index, kept in enumerate(cleaned)
+                if action.intent in _PRODUCT_LOOKUPS
+                and kept.intent in _PRODUCT_LOOKUPS
+                and _as_details(kept) == _as_details(action)
+            ),
+            None,
+        )
+        if twin is not None:
+            cleaned[twin] = _as_details(action)
+        elif action not in cleaned:
+            cleaned.append(action)
+    return cleaned
+
+
 def _understand_messages(state: ConversationState, repo: Repository) -> list[ChatMessage]:
     context = []
     last_product_id = state.get("last_product_id")
@@ -244,9 +277,11 @@ def build_graph(
             logger.warning("understand failed: validation_error")
             return {"failure": TurnFailure.VALIDATION_ERROR}
 
-        actions = parsed.actions
-        clarification = None if actions else parsed.clarification_question
-        return {"actions": actions, "clarification": clarification, "failure": None}
+        return {
+            "actions": parsed.actions,
+            "needs_clarification": parsed.needs_clarification,
+            "failure": None,
+        }
 
     def validate(state: ConversationState) -> dict[str, Any]:
         actions = list(state.get("actions", []))
@@ -260,18 +295,13 @@ def build_graph(
             and state.get("pending_order_id") is not None
             and not has_order_action
         ):
-            actions = [
-                ActionRequest(intent=IntentType.ORDER_STATUS),
-                *[a for a in actions if a.intent is not IntentType.OUT_OF_SCOPE],
-            ]
+            actions = [ActionRequest(intent=IntentType.ORDER_STATUS), *actions]
 
-        update: dict[str, Any] = {
+        actions = _clean_actions(actions)
+        return {
             "actions": actions[:MAX_ACTIONS_PER_TURN],
             "dropped_actions": len(actions) > MAX_ACTIONS_PER_TURN,
         }
-        if not actions:
-            update["clarification"] = state.get("clarification") or prompts.INVALID_OUTPUT_MESSAGE
-        return update
 
     def execute(state: ConversationState) -> dict[str, Any]:
         turn = _Turn(
@@ -314,11 +344,12 @@ def build_graph(
         if failure is TurnFailure.VALIDATION_ERROR:
             return prompts.INVALID_OUTPUT_MESSAGE
 
-        clarification = state.get("clarification")
-        if clarification:
-            if find_unsupported_claims(clarification, state["user_message"]):
-                return prompts.INVALID_OUTPUT_MESSAGE
-            return clarification
+        if not state.get("actions"):
+            # The real model has returned no actions for prompt injection, with or without asking
+            # for clarification. Either way the customer gets a fixed message.
+            if state.get("needs_clarification"):
+                return prompts.CLARIFICATION_MESSAGE
+            return prompts.OUT_OF_SCOPE_MESSAGE
 
         outcomes = state.get("outcomes", [])
         if all(outcome.facts is None for outcome in outcomes):

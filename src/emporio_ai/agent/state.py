@@ -41,7 +41,7 @@ class ConversationState(TypedDict, total=False):
     customer_email: str | None
     actions: list[ActionRequest]
     dropped_actions: bool
-    clarification: str | None
+    needs_clarification: bool
     failure: TurnFailure | None
     outcomes: list[ToolOutcome]
     reply: str

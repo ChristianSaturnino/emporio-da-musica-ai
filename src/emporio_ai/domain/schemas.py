@@ -211,7 +211,8 @@ class IntentType(StrEnum):
 # ActionRequest has no customer email and no product ID on purpose. Python extracts the email before
 # the model sees the message, and product references resolve against the session state.
 #
-# In ParsedTurn, only optional slots have a default, as the provider's strict schema rejects others.
+# ParsedTurn has no text for the customer on purpose: nothing written in this step reaches them. Its
+# fields have no default, as the provider's strict schema rejects any default other than None.
 
 
 class ActionRequest(Record):
@@ -231,4 +232,3 @@ class ActionRequest(Record):
 class ParsedTurn(Record):
     actions: list[ActionRequest]
     needs_clarification: bool
-    clarification_question: str | None = None
