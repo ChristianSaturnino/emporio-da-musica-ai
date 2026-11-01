@@ -8,7 +8,7 @@ _TOPIC_SECTIONS = {
     StoreTopic.ADDRESS: ("1.2",),
     StoreTopic.HOURS: ("2",),
     StoreTopic.CONTACT: ("1.2", "7"),
-    StoreTopic.ABOUT: ("1", "1.1"),
+    StoreTopic.ABOUT: ("1", "1.1", "1.2"),
 }
 _TOPIC_NOTES = {StoreTopic.CONTACT: (CONTACT_NOTE,)}
 

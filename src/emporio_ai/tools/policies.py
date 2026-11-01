@@ -7,9 +7,9 @@ POLICY_SOURCE = "Manual de Políticas e Procedimentos, versão 2.1, junho de 202
 MAX_SECTIONS = 3
 
 CONTACT_NOTE = (
-    "O manual traz dois números: (67) 3341-4444 na seção 1.2 (telefone/WhatsApp) e (67) 3321-4500 "
-    "na seção 7 (WhatsApp). Informe os dois e avise que o manual diverge. O e-mail é "
-    "contato@emporiodamusica.com.br na capa e aparece com outra grafia na seção 1.2."
+    "Há dois números registrados para telefone e WhatsApp: (67) 3341-4444 e (67) 3321-4500. "
+    "Informe os dois e diga que, se um não atender, o cliente pode tentar o outro. O e-mail é "
+    "contato@emporiodamusica.com.br, mesmo que outra grafia apareça nos dados."
 )
 _INSTALLMENT_NOTE = (
     "A tabela da seção 3 cita parcela mínima de R$ 100,00, mas a seção 3.1 define faixas. Siga a "
@@ -19,7 +19,9 @@ _INSTALLMENT_NOTE = (
 _DEFECT_NOTE = (
     "A seção 4.2 trata da troca em até 30 dias após a compra e a seção 8.1 da garantia legal de "
     "90 dias a partir do recebimento. São regras diferentes: apresente as duas, não afirme que um "
-    "direito acabou e oriente falar com a equipe."
+    "direito acabou nem que o cliente ainda tem o direito, pois a data de recebimento não é "
+    "conhecida. Não diga \"não se preocupe\" nem \"você ainda tem\". Explique o que cada regra diz "
+    "e oriente falar com a equipe para avaliar o caso."
 )
 # Keyed by section ID. These notes are written here, not taken from the PDF.
 _SECTION_NOTES = {
@@ -28,8 +30,12 @@ _SECTION_NOTES = {
     "3": _INSTALLMENT_NOTE,
     "3.1": _INSTALLMENT_NOTE,
     "4.1": (
-        "Vale para compras online e o prazo conta do recebimento. Sem saber o canal da compra e a "
-        "data de recebimento, não afirme que o cliente tem ou não o direito: pergunte."
+        "Explique sempre a regra: vale para compras online, até 7 dias corridos após o "
+        "recebimento, com o produto sem uso e na embalagem original. Se faltar o canal da compra "
+        "ou a data de recebimento, pergunte o que falta. Se o cliente já informou e parece estar "
+        "no prazo, diga que pela regra parece estar dentro do prazo e oriente falar com a equipe "
+        "para concluir. Se a compra foi na loja física, diga que essa regra é para compras online "
+        "e oriente falar com a equipe sobre o caso. Mas não afirme que a devolução está garantida."
     ),
     "4.2": _DEFECT_NOTE,
     "8.1": _DEFECT_NOTE,
@@ -43,7 +49,8 @@ _SECTION_NOTES = {
     ),
     "5.2": (
         "O valor depende de CEP, peso e dimensões, que não estão disponíveis aqui. Não informe "
-        "valor de frete nem prometa data de entrega."
+        "valor de frete nem prometa data de entrega. O manual não lista cidades atendidas: nunca "
+        "diga que a loja não entrega em uma cidade, explique as modalidades de envio."
     ),
     "7.1": "O manual sugere lojas parceiras, mas não lista nenhuma. Não cite lojas.",
 }

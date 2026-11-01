@@ -45,10 +45,10 @@ class FakeCompletions:
     create = _next
 
 
-def make_llm(*responses):
+def make_llm(*responses, model="test-model", **kwargs):
     completions = FakeCompletions(*responses)
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    return OpenAILLM(api_key="not-a-real-key", model="test-model", client=client), completions
+    return OpenAILLM(api_key="not-a-real-key", model=model, client=client, **kwargs), completions
 
 
 def api_error():
@@ -104,6 +104,48 @@ def test_provider_failure_is_not_retried_here():
     with pytest.raises(LLMUnavailableError):
         llm.parse_turn(MESSAGES)
     assert len(completions.calls) == 1
+
+
+# Token caps
+
+
+def test_parse_cap_leaves_room_for_reasoning():
+    # 425 tokens were measured for one real message, 243 of them reasoning. A cap of 400 made it
+    # fail on every attempt, and the customer was told the message was not understood.
+    llm, completions = make_llm(parse_response())
+    llm.parse_turn(MESSAGES)
+    assert completions.calls[0]["max_completion_tokens"] >= 2 * 425
+
+
+def test_cut_off_structure_is_retried_and_then_reported():
+    error = openai.LengthFinishReasonError(completion=SimpleNamespace(usage=None))
+    llm, completions = make_llm(error, error, parse_response())
+    with pytest.raises(LLMOutputError):
+        llm.parse_turn(MESSAGES)
+    assert len(completions.calls) == 2
+
+
+# Sampling options
+
+
+def test_older_models_get_a_temperature_and_no_reasoning_effort():
+    llm, completions = make_llm(parse_response(), create_response(), model="gpt-4o-mini")
+    llm.parse_turn(MESSAGES)
+    llm.compose_reply(MESSAGES)
+    assert completions.calls[0]["temperature"] == 0
+    assert completions.calls[1]["temperature"] == 0.3
+    assert all("reasoning_effort" not in call for call in completions.calls)
+
+
+def test_newer_models_get_a_reasoning_effort_and_no_temperature():
+    # gpt-6-luna answers 400 to any temperature other than the default.
+    llm, completions = make_llm(
+        parse_response(), create_response(), model="gpt-6-luna", reasoning_effort="low"
+    )
+    llm.parse_turn(MESSAGES)
+    llm.compose_reply(MESSAGES)
+    assert all(call["reasoning_effort"] == "low" for call in completions.calls)
+    assert all("temperature" not in call for call in completions.calls)
 
 
 # Schema

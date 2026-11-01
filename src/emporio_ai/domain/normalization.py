@@ -6,6 +6,7 @@ import unicodedata
 _PLURAL_SUFFIXES = (("oes", "ao"), ("aes", "ao"), ("ais", "al"), ("eis", "el"), ("s", ""))
 _MIN_STEMMED_LENGTH = 5
 _WORD_SEPARATORS = str.maketrans("-/(),", "     ")
+_CONNECTORS = frozenset({"a", "com", "da", "de", "do", "e", "em", "o", "para", "pra"})
 
 
 def normalize_text(text: str) -> str:
@@ -32,6 +33,11 @@ def _stem(token: str) -> str:
 def tokenize(text: str) -> list[str]:
     """Split text into normalized singular words. Other punctuation stays in the token."""
     return [_stem(word) for word in normalize_text(text).translate(_WORD_SEPARATORS).split()]
+
+
+def search_tokens(text: str) -> list[str]:
+    """Words a product must contain. "de" would otherwise match any name with that syllable."""
+    return [token for token in tokenize(text) if token not in _CONNECTORS]
 
 
 def word_tokens(text: str) -> list[str]:

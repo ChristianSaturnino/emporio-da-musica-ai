@@ -6,6 +6,7 @@ import streamlit as st
 
 from emporio_ai.agent.service import ConversationService, create_service
 from emporio_ai.domain.errors import ConfigurationError, DatabaseNotFoundError, DatasetError
+from emporio_ai.observability.events import configure_logging
 
 EXAMPLE_QUESTIONS = (
     "Quais violões têm até R$ 1.000 e estão disponíveis?",
@@ -58,6 +59,7 @@ def show_setup_error(title: str, command: str) -> None:
 
 
 def main() -> None:
+    configure_logging()
     st.set_page_config(page_title="Empório da Música", page_icon="🎸")
     st.title("🎸 Empório da Música")
     st.caption("Sua música começa aqui.")

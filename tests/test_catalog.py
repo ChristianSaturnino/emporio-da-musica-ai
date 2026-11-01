@@ -9,6 +9,7 @@ from emporio_ai.domain.schemas import Availability, LookupStatus
 from emporio_ai.tools.catalog import (
     MAX_ALTERNATIVES,
     MAX_RESULTS,
+    find_category_mention,
     get_product_details,
     get_product_price,
     search_products,
@@ -71,6 +72,18 @@ def test_browsing_excludes_coming_soon(repo):
 
 def test_browsing_excludes_discontinued_with_stock(repo):
     assert search_products(repo, category="baixos").total_matches == 3
+
+
+def test_most_expensive_first(repo):
+    # The Kala at R$ 1.749,00 costs less, and 130 is coming soon anyway.
+    result = search_products(repo, category="ukulele", limit=1, most_expensive_first=True)
+    assert [offer.name for offer in result.products] == ["Ohana BK-35E Barítono Elétrico Natural"]
+
+
+def test_most_expensive_first_keeps_unavailable_products_last(repo):
+    # Product 136 is cheap and discontinued; product 132 is the only Ibanez on sale.
+    result = search_products(repo, term="ibanez", most_expensive_first=True)
+    assert ids(result) == [132, 136]
 
 
 def test_results_are_sorted_by_effective_price(repo):
@@ -147,6 +160,45 @@ def test_accessories_are_reported_instead_of_searched(repo, kwargs):
     assert not result.unknown_category
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"category": "instrumentos"}, {"term": "instrumento"}, {"category": "produtos"}],
+)
+def test_generic_words_browse_the_catalog_instead_of_finding_nothing(repo, kwargs):
+    # "instrumentos" matched the wind categories by name, which have no products.
+    result = search_products(repo, **kwargs)
+    assert result.products
+    assert not result.unknown_category
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("quero comprar um violao", "violao"),
+        ("Tem VIOLÕES aí?", "violao"),
+        ("presente pro meu filho que toca guitarra", "guitarra"),
+        ("queria um ukulele", "ukulele"),
+        ("Qual a capital da França?", None),
+        ("quero comprar um produto", None),
+        ("instrumentos de madeira", None),
+    ],
+)
+def test_category_mention(repo, text, expected):
+    assert find_category_mention(repo, text) == expected
+
+
+def test_details_packed_into_the_category_still_find_products(repo):
+    # What gpt-6-luna sent for "quero um violao de 7 cordas ate 1200 reais".
+    result = search_products(repo, category="violões de 7 cordas", max_price=Decimal("1200"))
+    assert not result.unknown_category
+    assert 112 in ids(result)
+
+
+def test_connector_words_do_not_have_to_be_in_the_product_name(repo):
+    assert 112 in ids(search_products(repo, term="violão de 7 cordas"))
+    assert 95 in ids(search_products(repo, term="o takamine gd20"))
+
+
 def test_instruments_described_by_their_strings_are_not_accessories(repo):
     result = search_products(repo, term="violão 7 cordas")
     assert result.unsold_item is None
@@ -169,8 +221,17 @@ def test_named_search_keeps_unavailable_products_marked(repo):
     assert result.products[0].availability is Availability.OUT_OF_STOCK
 
 
-def test_only_available_removes_unavailable_named_products(repo):
-    assert search_products(repo, term="Giannini GF-3D", only_available=True).products == ()
+def test_only_available_leaves_out_unavailable_products_when_others_can_be_bought(repo):
+    result = search_products(repo, term="Giannini", only_available=True)
+    assert result.products
+    assert 96 not in ids(result)
+
+
+def test_only_available_still_reports_a_named_product_that_cannot_be_bought(repo):
+    # The real model adds in_stock to "Tem baixo Ibanez?", which then answered "not found".
+    result = search_products(repo, term="Ibanez", category="baixo", only_available=True)
+    assert ids(result) == [136]
+    assert result.products[0].availability is Availability.DISCONTINUED
 
 
 def test_unavailable_products_come_after_available_ones(repo):

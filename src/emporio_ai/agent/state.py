@@ -10,6 +10,7 @@ from emporio_ai.domain.schemas import ActionRequest, IntentType
 class TurnFailure(StrEnum):
     PROVIDER_ERROR = "provider_error"
     VALIDATION_ERROR = "validation_error"
+    REPLY_REJECTED = "reply_rejected"
 
 
 class OutcomeResult(StrEnum):
@@ -34,6 +35,7 @@ class ConversationState(TypedDict, total=False):
     # Kept between turns. Messages never hold a customer email, which is masked before this point.
     messages: list[dict[str, str]]
     last_product_id: int | None
+    last_result_ids: list[int]
     pending_order_id: int | None
 
     # Valid for one turn only.

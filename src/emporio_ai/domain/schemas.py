@@ -201,6 +201,7 @@ class IntentType(StrEnum):
     ORDER_STATUS = "order_status"
     POLICY_QUESTION = "policy_question"
     STORE_INFORMATION = "store_information"
+    HOW_TO_BUY = "how_to_buy"
     GREETING = "greeting"
     OUT_OF_SCOPE = "out_of_scope"
 
@@ -219,11 +220,13 @@ class ActionRequest(Record):
     intent: IntentType
     product_query: str | None = None
     refers_to_previous_product: bool | None = None
+    position_in_list: int | None = None
     category: str | None = None
     max_price_brl: Decimal | None = None
     in_stock: bool | None = None
     on_promotion: bool | None = None
     only_cheapest: bool | None = None
+    only_most_expensive: bool | None = None
     order_id: int | None = None
     policy_topic: str | None = None
     store_topic: StoreTopic | None = None

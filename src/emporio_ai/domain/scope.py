@@ -34,6 +34,32 @@ _INSTRUMENT_PHRASES = re.compile(
 )
 
 
+# Someone using these words is talking about the store, even if vaguely. They deserve a question
+# back, not a refusal. The words are compared by their first letters, like in policy search.
+_STORE_WORD_ROOTS = frozenset(
+    {
+        "apren",
+        "compr",
+        "escol",
+        "indic",
+        "instr",
+        "music",
+        "nylon",
+        "pedid",
+        "preco",
+        "prese",
+        "produ",
+        "recom",
+        "tocar",
+        "vende",
+    }
+)
+
+
+def mentions_store_subject(text: str) -> bool:
+    return any(word[:5] in _STORE_WORD_ROOTS for word in word_tokens(text))
+
+
 def find_unsold_item(text: str) -> str | None:
     """Return the first accessory named in the text, or None."""
     without_instruments = _INSTRUMENT_PHRASES.sub(" ", normalize_text(text))

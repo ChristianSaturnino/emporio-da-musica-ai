@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from emporio_ai.domain.errors import DatabaseNotFoundError
-from emporio_ai.domain.normalization import normalize_email, tokenize
+from emporio_ai.domain.normalization import normalize_email, search_tokens
 from emporio_ai.domain.schemas import Category, Order, OrderItem, Product, Promotion
 
 DEFAULT_LIMIT = 20
@@ -107,7 +107,7 @@ class Repository:
         column = "p.search_full" if include_description else "p.search_name"
         clauses = []
         params: list[str | int] = []
-        for token in tokenize(term or ""):
+        for token in search_tokens(term or ""):
             clauses.append(f"{column} LIKE ? ESCAPE '\\'")
             params.append(f"%{_escape_like(token)}%")
         if category_ids is not None:

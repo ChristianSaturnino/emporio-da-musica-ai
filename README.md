@@ -5,8 +5,9 @@ Campo Grande/MS, built for the Artefact AI Engineer technical challenge.
 
 ## Status
 
-Work in progress. The agent works through a Streamlit chat and a command-line chat, and automated
-tests use a fake model. Example conversations and the final documentation are still to come. This README will document the architecture, known limitations and
+Work in progress: the final documentation is still to come. The agent works through a Streamlit chat
+and a command-line chat. Real conversations are in [examples/](examples/), and measured results are
+in [evals/RESULTS.md](evals/RESULTS.md). This README will document the architecture, known limitations and
 AI-assisted development workflow as each part is completed. Decisions made so far are in
 [docs/decisions.md](docs/decisions.md).
 
@@ -64,7 +65,14 @@ python -m pytest
 ruff check .
 ```
 
-None of these commands call an external API.
+None of these commands call an external API: tests use a fake model and cannot reach the network.
+
+Two scripts do call the OpenAI API, which costs a small amount:
+
+```bash
+python scripts/run_eval.py dev heldout final shopper fresh clean
+python scripts/record_examples.py
+```
 
 ## Data
 

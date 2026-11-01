@@ -211,3 +211,72 @@ displays messages and calls `ConversationService`, so another interface could re
 "$" signs as a math formula. Sessions live in memory and are lost on restart, which is fine for a
 demo. `server.headless` is set so that a first run does not stop to ask for an email, which also
 means the browser does not open by itself.
+
+## 024. Structured events with an allow-list
+
+Each turn writes JSON events to stderr: `turn_started`, `intent_parsed`, `tool_executed`,
+`turn_completed` or `turn_failed`, plus `llm_call` with token counts and `reply_rejected`. `log_event`
+drops any field outside a fixed list, so a careless call cannot log a message or an email, and errors
+are logged by type rather than text. Session IDs are hashed. Only the Streamlit app turns the output
+on, which keeps the command-line chat readable. A real system would ship these events to a
+monitoring tool, which is out of scope here.
+
+## 025. Tests cannot reach the network
+
+Once a real key exists in `.env`, a test that reached the provider would spend money silently. A
+fixture makes every HTTP request fail during tests. The acceptance tests use a fake model for the
+interpretation, so they prove what the system does once a message is understood. How well the real
+model understands is shown by the recorded conversations in `examples/`, which come from
+`scripts/record_examples.py` and are not edited.
+
+## 026. Measuring the agent with separate case sets
+
+Fixed cases run against the real model. Some guide changes and others are kept out of the tuning.
+This paid off quickly: `gpt-4o-mini` reached 58/58 on the tuning set and only 34/44 on new questions,
+which showed that much of the gain was the prompt fitting the cases it had seen. Reading the replies
+still matters, since the checks look for words and missed some bad answers.
+
+Keeping a set clean turned out to need enforcement. Phrases from the tests ended up in the prompt,
+including from a set meant to be unseen, which inflated its score. Examples in the prompt were
+replaced by general rules, and a test now fails if a phrase from any set appears in a prompt. Full
+numbers and caveats are in [evals/RESULTS.md](../evals/RESULTS.md).
+
+## 027. `gpt-6-luna` as the default model
+
+It scored 42/44 on held-out against 34/44 for `gpt-4o-mini`, costs less, and has no announced shutdown,
+while `gpt-4o-mini` has one for January 2027. The rule for adopting it was set before that comparison.
+It only accepts the default temperature, so results vary a little between runs. The adapter still
+supports older models, which take a temperature instead of a reasoning effort.
+
+## 028. Problems found by measuring were fixed in code first
+
+Most failures could have been patched in the prompt, but a prompt is a request and code is a
+guarantee, so code came first where possible:
+
+- Policy search uses the model's topic and the original message, because "boquilha tem troca?" was
+  reduced to "troca" and got a wrong "yes".
+- A tracking code or promotion percentage missing from the reply is added.
+- An action mixing a product and a policy question is split in two.
+- A named product that cannot be bought is reported, rather than answered with "not found".
+- A rejected reply gets one chance to be rewritten before the fixed message.
+- A limit in words ("800 reais") counts as evidence for "R$ 800", which the reply check was rejecting.
+
+The prompt was changed for what code cannot decide, such as not claiming a right is still valid
+without knowing the delivery date. Those instructions can still fail.
+
+## 029. A customer is never refused for wanting to buy
+
+The first version trusted the model's `out_of_scope`, and a real conversation showed the cost:
+"quero comprar um violão" was refused. A customer wrongly refused is worse than one asked a question
+they did not need, so the refusal is now harder to reach. Naming an instrument the store carries runs
+a search, whatever the model decided. Vague shopping words get a question back. Only messages with
+neither are declined. As a trade-off, "me conta uma piada de músico" gets a question.
+
+An accessory only counts when the customer's own words name it, so the model's rewording cannot
+cause a refusal. The check is lexical, so a message like "a bateria do meu celular" would run a search.
+
+## 030. Buying is handed over to the team
+
+The assistant is read-only and cannot close a sale, so it says so and gives the store's contacts.
+"Quero comprar o Yamaha C40" answers with the price and that hand-over. The last list shown is kept
+per session, so "quero o segundo" resolves in code, with the position out of the model's hands.

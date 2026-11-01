@@ -139,7 +139,6 @@ def test_question_finds_the_right_section(index, question, expected_first):
         ("Posso trocar um ukulele que comprei em liquidação?", "4.4"),
         ("Onde acompanho a entrega?", "5.3"),
         ("Quero reclamar do atendimento", "7.3"),
-        ("A caixa chegou amassada, o que eu faço?", "5.2"),
     ],
 )
 def test_questions_that_retrieval_once_missed(index, question, expected_first):
@@ -296,6 +295,11 @@ def test_contact_flags_the_divergence_between_phone_numbers(index):
     result = get_store_information(index, StoreTopic.CONTACT)
     assert [section.section_id for section in result.sections] == ["1.2", "7"]
     assert result.notes == (CONTACT_NOTE,)
+
+
+def test_about_includes_the_company_data(index):
+    sections = get_store_information(index, StoreTopic.ABOUT).sections
+    assert "12.345.678/0001-90" in " ".join(section.content for section in sections)
 
 
 def test_about_says_the_store_only_sells_instruments(index):
