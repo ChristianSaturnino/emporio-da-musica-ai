@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emporio-ai"
+version = "0.1.0"
+description = "Conversational customer-service assistant for Empório da Música, a fictional musical instrument store."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=1.2,<2",
+    "openai>=3.42,<4",
+    "pydantic>=2.14,<3",
+    "pypdf>=6.21,<7",
+    "python-dotenv>=1.2,<2",
+    "streamlit>=1.66,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.2,<10",
+    "ruff>=0.17,<0.18",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

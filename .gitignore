@@ -1,0 +1,19 @@
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Generated databases
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
