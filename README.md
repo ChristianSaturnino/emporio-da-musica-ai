@@ -5,7 +5,7 @@ Campo Grande/MS, built for the Artefact AI Engineer technical challenge.
 
 ## Status
 
-Work in progress. The challenge datasets, the read-only data layer, the catalog tools and the policy
+Work in progress. The challenge datasets, the read-only data layer and the catalog, policy and order
 tools exist so far: the agent is not implemented yet. This README will document the architecture, known limitations and
 AI-assisted development workflow as each part is completed. Decisions made so far are in
 [docs/decisions.md](docs/decisions.md).
@@ -72,3 +72,11 @@ Known quirks in the supplied data, kept as they are:
   decision 014 in [docs/decisions.md](docs/decisions.md) for how each case is handled.
 - The manual mentions more than 300 instruments, including wind and orchestral ones. The product
   snapshot has 65, in six of the nine categories.
+
+## Security and privacy limitations
+
+Order lookup asks for the order ID and the email of the customer who placed it, and it returns only
+the status, date, items, tracking code and estimated delivery. **This is a simulated check, not
+authentication.** All data here is fictional and public, including the emails that pass the check,
+and attempts are not limited. A production system would need real login or one-time codes,
+session-based authorization, rate limiting, auditing and a private database.

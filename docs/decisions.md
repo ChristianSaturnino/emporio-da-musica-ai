@@ -123,3 +123,19 @@ applies to product searches only: "cordas" in a warranty question is not a purch
 manual's list is given as examples, so a few other common accessories are included. Phrases like
 "7 cordas" are recognized as instruments, but a wording like "violão de cordas de aço" would still be
 reported as an accessory.
+
+## 016. Order lookup needs the order ID and the customer's email
+
+An order ID alone is easy to guess, so status also requires the email of the customer who placed the
+order. The design avoids confirming that an order exists: a wrong email and an unknown order give
+identical results, and a missing email is requested before any lookup. An email alone finds nothing,
+as there is no lookup by customer.
+
+The result only has status, order date, items, tracking code and estimated delivery. The total,
+payment method and internal notes stay out. A cancellation note can mention things like an invalid
+address, so the customer is told to contact the team for the reason.
+
+This is a simulated check and not authentication. The repository is public and includes the demo
+customers, there is no limit on attempts, and customers 11 and 43 share an email. Production would
+need real login or one-time codes, session-based authorization, rate limiting, auditing and a
+private database.

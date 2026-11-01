@@ -166,3 +166,29 @@ class StoreInformation(Record):
     source: str
     sections: tuple[PolicySection, ...]
     notes: tuple[str, ...] = ()
+
+
+class OrderAccess(StrEnum):
+    VERIFIED = "verified"
+    ORDER_ID_REQUIRED = "order_id_required"
+    EMAIL_REQUIRED = "email_required"
+    NOT_VERIFIED = "not_verified"
+
+
+class OrderSummary(Record):
+    """What a customer may see about their order. Payment, total and notes are left out."""
+
+    order_id: int
+    status: OrderStatus
+    order_date: date
+    items: tuple[OrderItem, ...]
+    tracking_code: str | None
+    estimated_delivery: date | None
+
+
+class OrderStatusResult(Record):
+    """Only VERIFIED has an order. No other outcome reveals whether the order exists."""
+
+    access: OrderAccess
+    order: OrderSummary | None = None
+    notes: tuple[str, ...] = ()
