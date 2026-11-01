@@ -96,14 +96,34 @@ def test_find_returns_every_match(repo):
 
 
 def test_find_by_category(repo):
-    products = repo.find_products(category_id=2, limit=MAX_LIMIT)
+    products = repo.find_products(category_ids=[2], limit=MAX_LIMIT)
     assert len(products) == 4
     assert {product.category_name for product in products} == {"Baixos"}
 
 
+def test_find_by_several_categories(repo):
+    products = repo.find_products(category_ids=[2, 3], limit=MAX_LIMIT)
+    assert {product.category_name for product in products} == {"Baixos", "Baterias e Percussão"}
+
+
 def test_find_combines_term_and_category(repo):
-    assert repo.find_products("takamine", category_id=5)
-    assert repo.find_products("takamine", category_id=1) == []
+    assert repo.find_products("takamine", category_ids=[5])
+    assert repo.find_products("takamine", category_ids=[1]) == []
+
+
+@pytest.mark.parametrize("term", ["violão", "violões", "VIOLOES"])
+def test_find_matches_category_and_plural_forms(repo, term):
+    assert len(repo.find_products(term, limit=MAX_LIMIT)) == 35
+
+
+@pytest.mark.parametrize("term", ["gf3d", "GF-3D", "gf 3d"])
+def test_find_matches_codes_with_or_without_hyphen(repo, term):
+    assert names(repo.find_products(term)) == ["Giannini GF-3D Dreadnought Sunburst"]
+
+
+def test_description_is_only_searched_when_requested(repo):
+    assert repo.find_products("clássico") == []
+    assert repo.find_products("clássico", include_description=True)
 
 
 def test_find_without_match_returns_empty(repo):

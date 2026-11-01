@@ -32,3 +32,47 @@ No repository method returns a customer record, and `Order` has no customer fiel
 only be checked through `order_email_matches`, which answers yes or no for a specific order. This
 is not real authentication. Customers 11 and 43 share an email address in the dataset, so that
 address passes the check for orders of either customer.
+
+## 006. Availability puts status before stock
+
+A product is only available when its status is `active` and it has stock. Product 136 is
+`discontinued` with 13 units and product 130 is `coming_soon` with 2: neither is on sale. Browsing
+without a term hides unavailable products. A search for a specific name still returns them, marked
+as unavailable, so the assistant can say so instead of claiming the product does not exist.
+
+## 007. What a price quote means
+
+- The effective price is the promotional price when a promotion is active, otherwise the list
+  price. `max_price` filters on it, inclusively, because "até R$ 1.000" should cover what the
+  customer would actually pay.
+- PIX is not part of the effective price, because it depends on how the customer chooses to pay. A
+  product at R$ 1,049 is not listed under R$ 1,000 even though PIX would bring it to R$ 996.55.
+- The manual says the PIX discount does not apply to promotional prices, so a quote never has both.
+- Promotions depend on stock (manual, section 6.2), so a product that cannot be bought only shows
+  its list price, with no discounts.
+- Promotions have no dates in the data, so only `is_active` decides whether one is in effect.
+- The data has at most one active promotion per product. Since promotions are not cumulative, the
+  largest would apply if that ever changed.
+- Amounts are rounded to cents with half-up rounding, the usual commercial convention.
+
+## 008. Lexical product search
+
+Lookups match every word of the term against the name and category, ignoring case, accents and
+plurals, so "violões" finds products whose name never says "violão". The description is only used
+when that finds nothing, because it is noisier: one ukulele description mentions "violão". Rules
+stay in Python, so tools read all matches and filter afterwards. This is fine for 65 products but
+would need filtering in SQL for a much larger catalog.
+
+Six descriptions name a different brand from the product name, so the fallback can surface a product
+for a brand it is not sold under: "tama" finds the Pearl kit. The name stays authoritative.
+
+## 009. No guessing when a name is ambiguous
+
+A name that matches several products returns candidates instead of picking one, so the assistant
+can ask. This keeps a wrong product from being priced or carried into the next turn.
+
+## 010. Alternatives for unavailable products
+
+The manual (section 7.3) asks for similar options when a product is unavailable. "Similar" is
+defined narrowly as available products of the same category, closest in price. The data has no
+explicit successor relation, so none is claimed.

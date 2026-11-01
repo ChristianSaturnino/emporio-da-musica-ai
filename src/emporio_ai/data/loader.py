@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from emporio_ai.domain.errors import DatasetError
-from emporio_ai.domain.normalization import normalize_email, normalize_text
+from emporio_ai.domain.normalization import build_search_text, normalize_email
 
 _SCHEMA = (
     """
@@ -24,14 +24,15 @@ _SCHEMA = (
     CREATE TABLE products (
         product_id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
-        normalized_name TEXT NOT NULL,
         category_id INTEGER NOT NULL REFERENCES categories (category_id),
         description TEXT,
         price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
         stock_quantity INTEGER NOT NULL CHECK (stock_quantity >= 0),
         status TEXT NOT NULL CHECK (status IN ('active', 'discontinued', 'coming_soon')),
         specs TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        search_name TEXT NOT NULL,
+        search_full TEXT NOT NULL
     )
     """,
     """
@@ -141,11 +142,9 @@ def _parse_category(row: dict[str, str | None]) -> tuple[Any, ...]:
 
 
 def _parse_product(row: dict[str, str | None]) -> tuple[Any, ...]:
-    name = _required(row, "name")
     return (
         _integer(row, "product_id"),
-        name,
-        normalize_text(name),
+        _required(row, "name"),
         _integer(row, "category_id"),
         _optional(row, "description"),
         _cents(row, "price_brl"),
@@ -204,7 +203,6 @@ _TABLES: dict[str, tuple[_RowParser, tuple[str, ...]]] = {
         (
             "product_id",
             "name",
-            "normalized_name",
             "category_id",
             "description",
             "price_cents",
@@ -212,6 +210,8 @@ _TABLES: dict[str, tuple[_RowParser, tuple[str, ...]]] = {
             "status",
             "specs",
             "created_at",
+            "search_name",
+            "search_full",
         ),
     ),
     "promotions": (
@@ -253,6 +253,25 @@ def _read_csv(path: Path, parse_row: _RowParser) -> list[tuple[Any, ...]]:
     return rows
 
 
+def _add_search_columns(
+    products: list[tuple[Any, ...]], categories: list[tuple[Any, ...]]
+) -> list[tuple[Any, ...]]:
+    category_names = {category[0]: category[1] for category in categories}
+    rows = []
+    for product in products:
+        _, name, category_id, description, *_ = product
+        # An unknown category is rejected later by the foreign key.
+        category_name = category_names.get(category_id, "")
+        rows.append(
+            (
+                *product,
+                build_search_text(name, category_name),
+                build_search_text(name, category_name, description or ""),
+            )
+        )
+    return rows
+
+
 def build_database(data_dir: Path, db_path: Path) -> dict[str, int]:
     """Rebuild the database from the CSV files and return the row count of each table.
 
@@ -262,6 +281,9 @@ def build_database(data_dir: Path, db_path: Path) -> dict[str, int]:
         table: _read_csv(data_dir / f"{table}.csv", parse_row)
         for table, (parse_row, _) in _TABLES.items()
     }
+    rows_by_table["products"] = _add_search_columns(
+        rows_by_table["products"], rows_by_table["categories"]
+    )
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     # isolation_level=None leaves transaction control to the explicit BEGIN and COMMIT below,

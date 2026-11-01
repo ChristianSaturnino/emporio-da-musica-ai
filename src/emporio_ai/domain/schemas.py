@@ -1,4 +1,4 @@
-"""Typed records returned by the data layer."""
+"""Typed records returned by the data layer and by the tools."""
 
 from datetime import date
 from decimal import Decimal
@@ -70,3 +70,66 @@ class Order(Record):
     estimated_delivery: date | None
     notes: str | None
     items: tuple[OrderItem, ...]
+
+
+class Availability(StrEnum):
+    AVAILABLE = "available"
+    OUT_OF_STOCK = "out_of_stock"
+    DISCONTINUED = "discontinued"
+    COMING_SOON = "coming_soon"
+
+
+class LookupStatus(StrEnum):
+    FOUND = "found"
+    AMBIGUOUS = "ambiguous"
+    NOT_FOUND = "not_found"
+
+
+class PriceQuote(Record):
+    """Prices for one product. Discount fields are None when the discount does not apply."""
+
+    list_price: Decimal
+    promotion_percent: int | None = None
+    promotion_label: str | None = None
+    promotional_price: Decimal | None = None
+    pix_price: Decimal | None = None
+    effective_price: Decimal
+
+
+class ProductOffer(Record):
+    product_id: int
+    name: str
+    category_name: str
+    availability: Availability
+    quote: PriceQuote
+
+
+class ProductDetails(Record):
+    offer: ProductOffer
+    description: str | None
+    stock_quantity: int
+    specs: dict[str, Any]
+    alternatives: tuple[ProductOffer, ...] = ()
+
+
+class ProductCandidate(Record):
+    product_id: int
+    name: str
+
+
+class ProductSearchResult(Record):
+    products: tuple[ProductOffer, ...] = ()
+    total_matches: int = 0
+    unknown_category: bool = False
+
+
+class ProductDetailsResult(Record):
+    status: LookupStatus
+    details: ProductDetails | None = None
+    candidates: tuple[ProductCandidate, ...] = ()
+
+
+class ProductPriceResult(Record):
+    status: LookupStatus
+    offer: ProductOffer | None = None
+    candidates: tuple[ProductCandidate, ...] = ()

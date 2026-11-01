@@ -2,13 +2,14 @@
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from contextlib import closing
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 from emporio_ai.domain.errors import DatabaseNotFoundError
-from emporio_ai.domain.normalization import normalize_email, normalize_text
+from emporio_ai.domain.normalization import normalize_email, tokenize
 from emporio_ai.domain.schemas import Category, Order, OrderItem, Product, Promotion
 
 DEFAULT_LIMIT = 20
@@ -94,27 +95,31 @@ class Repository:
     def find_products(
         self,
         term: str | None = None,
-        category_id: int | None = None,
+        category_ids: Sequence[int] | None = None,
         limit: int = DEFAULT_LIMIT,
+        include_description: bool = False,
     ) -> list[Product]:
-        """Find products whose name contains every word of the term, ignoring case and accents.
+        """Find products matching every word of the term, ignoring case, accents and plurals.
 
+        The term is matched against name and category, plus the description if requested.
         Only fixed clauses go into the SQL text; every value is bound as a parameter.
         """
+        column = "p.search_full" if include_description else "p.search_name"
         clauses = []
         params: list[str | int] = []
-        for token in normalize_text(term or "").split():
-            clauses.append("p.normalized_name LIKE ? ESCAPE '\\'")
+        for token in tokenize(term or ""):
+            clauses.append(f"{column} LIKE ? ESCAPE '\\'")
             params.append(f"%{_escape_like(token)}%")
-        if category_id is not None:
-            clauses.append("p.category_id = ?")
-            params.append(category_id)
+        if category_ids is not None:
+            placeholders = ", ".join("?" for _ in category_ids)
+            clauses.append(f"p.category_id IN ({placeholders})")
+            params.extend(category_ids)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(max(1, min(limit, MAX_LIMIT)))
 
         with closing(connect_read_only(self._db_path)) as connection:
             rows = connection.execute(
-                f"{_PRODUCT_SELECT} {where} ORDER BY p.normalized_name, p.product_id LIMIT ?",
+                f"{_PRODUCT_SELECT} {where} ORDER BY p.search_name, p.product_id LIMIT ?",
                 params,
             ).fetchall()
         return [_to_product(row) for row in rows]
