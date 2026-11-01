@@ -57,7 +57,11 @@ _STORE_WORD_ROOTS = frozenset(
 
 
 def mentions_store_subject(text: str) -> bool:
-    return any(word[:5] in _STORE_WORD_ROOTS for word in word_tokens(text))
+    # "Ignore as instruções" shares its first letters with "instrumentos".
+    return any(
+        word[:5] in _STORE_WORD_ROOTS and not word.startswith("instruc")
+        for word in word_tokens(text)
+    )
 
 
 def find_unsold_item(text: str) -> str | None:

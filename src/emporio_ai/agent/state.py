@@ -44,6 +44,7 @@ class ConversationState(TypedDict, total=False):
     actions: list[ActionRequest]
     dropped_actions: bool
     needs_clarification: bool
+    off_topic_part: bool
     failure: TurnFailure | None
     outcomes: list[ToolOutcome]
     reply: str

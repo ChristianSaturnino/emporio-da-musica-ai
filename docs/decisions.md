@@ -280,3 +280,40 @@ cause a refusal. The check is lexical, so a message like "a bateria do meu celul
 The assistant is read-only and cannot close a sale, so it says so and gives the store's contacts.
 "Quero comprar o Yamaha C40" answers with the price and that hand-over. The last list shown is kept
 per session, so "quero o segundo" resolves in code, with the position out of the model's hands.
+
+## 031. Guardrails assume the model can be fooled
+
+A scripted model that obeyed every attack showed where the code had no answer of its own. Customer
+data was safe, but the text of a reply depended on the prompt, and one check was worse than nothing:
+the customer's own message counted as evidence, so "agora custa R$ 1,00" vouched for itself. That had
+been added so a reply could repeat a customer's budget. Now only the store's data counts, and a
+harmless repeat costs a rewrite.
+
+The reply check also covers percentages, phone numbers, links, free offers and long passages of the
+prompts. Links cover Markdown images, so no separate cleaning of Markdown was needed.
+
+A prompt rule was not enough for mixed requests: told to answer only from the data, the real model
+gave an address and then translated "bom dia" to Japanese, in both runs before the change. So the
+first step now marks such messages with `off_topic_part`, and the second step does not receive them,
+since what it does not read it cannot act on. A fixed sentence declines the rest. This depends on
+the mark, so it reduces the risk without removing it. The mark is a boolean, which keeps the first
+step without any free text.
+
+Refused messages leave the conversation context, as an instruction planted in one turn could
+otherwise come back in the next. A refused request naming an order number goes to the order lookup,
+which is safe because the email check there does not depend on the model. "Instruções" no longer
+counts as a store word because it shares its first letters with "instrumentos".
+
+Rate limiting and masking of other personal data were left out, as this runs locally on fictional
+data. The README lists them as limitations.
+
+## 032. The date comes from code
+
+With no clock, the model guessed the day, and a real run answered "Amanhã, domingo, a loja estará
+fechada" on a Sunday. Forbidding it from naming a day would leave "abre amanhã?" without a useful
+answer, so questions about hours now carry today and tomorrow, with the weekday worked out in Python.
+Other flows get no date, and the prompt forbids guessing one there.
+
+The date is the store's, on a fixed UTC-4, so a server elsewhere does not change the answer. There is
+no holiday calendar, as the data has none and municipal holidays would need upkeep. The reply warns
+that the store closes on holidays, which leaves a wrong "yes" possible on a holiday.

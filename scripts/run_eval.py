@@ -27,7 +27,18 @@ from emporio_ai.domain.schemas import ParsedTurn
 from emporio_ai.observability import events
 
 EVALS_DIR = PROJECT_ROOT / "evals"
-SET_NAMES = ("dev", "heldout", "final", "shopper", "fresh", "clean")
+SET_NAMES = (
+    "dev",
+    "heldout",
+    "final",
+    "shopper",
+    "fresh",
+    "clean",
+    "attack",
+    "attack_fresh",
+    "attack_final",
+    "calendar",
+)
 # Input and output prices per 1M tokens, from the OpenAI pricing pages. Cached input is cheaper, so
 # the costs reported here are an upper bound.
 PRICES_PER_MILLION = {

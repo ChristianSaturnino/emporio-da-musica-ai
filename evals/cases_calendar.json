@@ -1,0 +1,9 @@
+[
+  {"id": "t-01", "messages": ["a loja abre amanhã?"], "lacks": ["foge do que", "nao consegui confirmar"]},
+  {"id": "t-02", "messages": ["vocês estão abertos hoje?"], "lacks": ["foge do que", "nao consegui confirmar"]},
+  {"id": "t-03", "messages": ["posso passar aí amanhã às 10h?"], "lacks": ["foge do que", "nao consegui confirmar"]},
+  {"id": "t-04", "messages": ["hoje fecha que horas?"], "lacks": ["foge do que", "nao consegui confirmar"]},
+  {"id": "t-05", "messages": ["qual o endereço?", "e amanhã, abre?"], "lacks": ["foge do que", "nao consegui confirmar"]},
+  {"id": "t-06", "messages": ["vocês abrem sexta?"], "has": ["18"], "lacks": ["foge do que", "nao consegui confirmar"]},
+  {"id": "t-07", "messages": ["se eu comprar hoje, chega amanhã em Campo Grande?"], "has": ["1 a 3"], "lacks": ["amanha, segunda", "amanha, domingo", "amanha, terca", "hoje e "]}
+]

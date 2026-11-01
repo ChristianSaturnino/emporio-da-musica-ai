@@ -70,7 +70,7 @@ None of these commands call an external API: tests use a fake model and cannot r
 Two scripts do call the OpenAI API, which costs a small amount:
 
 ```bash
-python scripts/run_eval.py dev heldout final shopper fresh clean
+python scripts/run_eval.py dev heldout final shopper fresh clean attack attack_fresh attack_final calendar
 python scripts/record_examples.py
 ```
 
@@ -96,6 +96,41 @@ Known quirks in the supplied data, kept as they are:
 - The manual mentions more than 300 instruments, including wind and orchestral ones. The product
   snapshot has 65, in six of the nine categories.
 
+## Prompt injection and off-topic questions
+
+The design assumes the model can be fooled, so what matters most does not depend on it.
+
+Enforced by code, whatever the model does:
+
+- **Customer data is out of reach.** No tool lists customers, and a verified order returns no name,
+  phone or email. The email check runs in Python on an address the model never sees.
+- **The model cannot choose what runs.** It fills a fixed schema, and each of the 9 intents runs one
+  known handler. There is no loop, and no text from the first step reaches the customer.
+- **Off-topic questions cost nothing to refuse.** They get a fixed message without a second call.
+- **Replies are checked against what the store said.** Amounts, percentages, tracking codes, emails,
+  phone numbers, links, free offers and long passages of the prompts are rejected unless they are in
+  the data. What the customer wrote does not count as evidence.
+- **SQL and input size.** Queries are parameterized on a read-only connection, and messages over
+  1000 characters are refused before any call.
+
+Reduced, but dependent on the model noticing:
+
+- **Mixed requests.** When the first step marks a message as partly off topic, the model writing the
+  reply does not read that message at all, and a fixed sentence declines the rest. If the first step
+  misses it, only the prompt stands in the way. In one measured run, it answered a translation.
+- **Planted instructions.** Messages marked as off topic are dropped from the conversation context.
+
+Not covered:
+
+- **Claims without a checkable shape.** "Custa um real" or an invented service pass the checks,
+  though the prompt forbids them.
+- **Paraphrased prompts.** Only long verbatim passages are caught. The repository is public, so the
+  prompts hold no secret.
+- **Cost.** There is no limit on messages. A public deployment would need rate limiting, as each
+  message can cost up to about US$ 0.003.
+
+See [evals/RESULTS.md](evals/RESULTS.md) for how this was measured.
+
 ## Security and privacy limitations
 
 Order lookup asks for the order ID and the email of the customer who placed it, and it returns only
@@ -103,3 +138,6 @@ the status, date, items, tracking code and estimated delivery. **This is a simul
 authentication.** All data here is fictional and public, including the emails that pass the check,
 and attempts are not limited. A production system would need real login or one-time codes,
 session-based authorization, rate limiting, auditing and a private database.
+
+Only email addresses are masked before reaching the provider. A CPF or phone number typed into the
+chat is sent to OpenAI, with `store=False`, and is not written to the logs.

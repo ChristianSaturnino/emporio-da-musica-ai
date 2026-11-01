@@ -235,3 +235,4 @@ class ActionRequest(Record):
 class ParsedTurn(Record):
     actions: list[ActionRequest]
     needs_clarification: bool
+    off_topic_part: bool | None = None
