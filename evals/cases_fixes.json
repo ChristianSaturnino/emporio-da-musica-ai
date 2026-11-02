@@ -1,0 +1,10 @@
+[
+  {"id": "fx-01", "messages": ["quais violões disponíveis até 1000 reais?", "Tem Giannini GF-3D?"], "checks_by_turn": {"1": {"has": ["Giannini GF-1R"]}}, "has": ["GF-3D", ["indisponivel", "esgotado", "sem estoque"]], "lacks": ["nao tenho informacoes do giannini"]},
+  {"id": "fx-02", "messages": ["quais violões disponíveis até 1000 reais?", "Tem Giannini GF-9X?"], "checks_by_turn": {"1": {"has": ["Giannini GF-1R"]}}, "has": [["nao encontrei", "conferir"]], "lacks": ["579,90"]},
+  {"id": "fx-03", "messages": ["Quanto custa o Takamine GD20?", "Quais guitarras vocês têm?", "Quanto custa essa?"], "checks_by_turn": {"1": {"has": ["2.199,00"]}, "2": {"has": ["Telecaster"]}}, "has": [["de qual destes", "de qual destas", "de qual delas", "de qual dessas", "de qual deles", "de qual desses", "de qual guitarra", "de qual produto", "de qual modelo", "qual destes", "qual destas", "qual delas", "qual dessas", "qual deles", "qual desses", "qual guitarra", "qual modelo", "qual produto", "qual das guitarras", "qual das opcoes", "qual e a guitarra", "nome da guitarra", "modelo da guitarra", "nome ou o modelo"]], "lacks": ["2.199,00"]},
+  {"id": "fx-04", "messages": ["Quanto custa o Takamine GD20?", "Quais guitarras vocês têm?", "quanto sai a segunda?", "e essa tem desconto?"], "checks_by_turn": {"3": {"has": ["PRS", "6.800,00"]}}, "has": ["PRS"], "lacks": ["Takamine", "de qual produto"]},
+  {"id": "fx-05", "messages": ["me mostra suas guitarras", "gostei da fender"], "checks_by_turn": {"1": {"has": ["Telecaster", "Stratocaster"]}}, "has": ["Telecaster", "Stratocaster"], "lacks": ["corpo"]},
+  {"id": "fx-06", "messages": ["O Ohana CK-20 está em promoção? Soma com o PIX?"], "has": ["20%", "439,20"], "lacks": ["nao tenho a informacao", "nao tenho informacao", "417,24"]},
+  {"id": "fx-07", "messages": ["Quanto custa o Takamine GD20?", "qual o horário de sábado?", "e aquele tem desconto?"], "checks_by_turn": {"2": {"has": ["13"]}}, "has": ["2.199,00", "nao ha promocao"]},
+  {"id": "fx-08", "messages": ["Crafter HT-100 tem desconto? E aceita boleto?"], "has": ["18%", "1.967,18", "boleto"], "lacks": ["nao tenho a informacao sobre uma promocao"]}
+]
