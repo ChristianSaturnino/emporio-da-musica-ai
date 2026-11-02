@@ -63,6 +63,17 @@ _STORE_WORD_ROOTS = frozenset(
 )
 
 
+# Among those, the words of someone looking for something to buy.
+_SHOPPING_WORD_ROOTS = frozenset({"apren", "compr", "escol", "indic", "instr", "prese", "produ"})
+
+
+def is_shopping_without_a_product(text: str) -> bool:
+    return any(
+        word[:5] in _SHOPPING_WORD_ROOTS and not word.startswith("instruc")
+        for word in word_tokens(text)
+    )
+
+
 def mentions_store_subject(text: str) -> bool:
     # "Ignore as instruções" shares its first letters with "instrumentos".
     return any(

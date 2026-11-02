@@ -9,10 +9,12 @@ from emporio_ai.domain.schemas import Availability, LookupStatus
 from emporio_ai.tools.catalog import (
     MAX_ALTERNATIVES,
     MAX_RESULTS,
+    catalog_overview,
     correct_typos,
     find_category_mention,
     get_product_details,
     get_product_price,
+    products_named_in,
     search_products,
 )
 
@@ -413,6 +415,67 @@ def test_model_named_in_full_is_not_confused_with_a_longer_one(repo):
 
 def test_brand_alone_is_still_ambiguous(repo):
     assert get_product_price(repo, name="Martin").status is LookupStatus.AMBIGUOUS
+
+
+# What the store has
+
+
+def test_overview_counts_what_can_be_bought_with_its_lowest_price(repo):
+    overview = {entry.category: entry for entry in catalog_overview(repo)}
+    # 35 acoustic guitars, less one out of stock and one discontinued.
+    assert overview["Violões"].available_products == 33
+    assert overview["Violões"].lowest_price == Decimal("429.90")
+    assert overview["Guitarras"].available_products == 5
+    assert overview["Guitarras"].lowest_price == Decimal("5400.00")
+    assert overview["Baixos"].available_products == 3
+
+
+def test_overview_starts_from_what_is_most_accessible(repo):
+    assert catalog_overview(repo)[0].category == "Ukuleles"
+
+
+def test_overview_leaves_out_categories_with_nothing_to_sell(repo):
+    categories = {entry.category for entry in catalog_overview(repo)}
+    assert categories == {
+        "Violões",
+        "Guitarras",
+        "Baixos",
+        "Baterias e Percussão",
+        "Teclados e Pianos",
+        "Ukuleles",
+    }
+
+
+def guitar_ids(repo):
+    return [product.product_id for product in repo.find_products(category_ids=[1])]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "quero a fender",
+            {"Fender Telecaster Player Series", "Fender Stratocaster American Pro II"},
+        ),
+        ("gostei da telecaster", {"Fender Telecaster Player Series"}),
+        ("FENDER STRATOCASTER", {"Fender Stratocaster American Pro II"}),
+        ("quero a primeira", set()),
+        ("quanto custa um violão Takamine?", set()),
+    ],
+)
+def test_products_named_in_a_list(repo, text, expected):
+    found = products_named_in(repo, text, guitar_ids(repo))
+    assert {product.name for product in found} == expected
+
+
+def test_a_word_shared_by_the_whole_list_tells_nothing_apart(repo):
+    ids = [p.product_id for p in repo.find_products("Fender", limit=5)]
+    assert products_named_in(repo, "quero a fender", ids) == []
+
+
+def test_numbers_alone_do_not_name_a_product(repo):
+    ids = [p.product_id for p in repo.find_products(category_ids=[3], limit=5)]
+    assert products_named_in(repo, "até 1 mil", ids) == []
 
 
 # Price ranges

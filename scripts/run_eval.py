@@ -44,6 +44,7 @@ SET_NAMES = (
     "review_final",
     "review_last",
     "closing",
+    "service",
 )
 # Input and output prices per 1M tokens, from the OpenAI pricing pages. Cached input is cheaper, so
 # the costs reported here are an upper bound.

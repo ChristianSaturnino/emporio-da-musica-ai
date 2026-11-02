@@ -18,7 +18,8 @@ are still not independent.
 | `cases_attack_final.json` | Prompt injection, plus legitimate messages as controls | 19/19 |
 | `cases_review_final.json` | Typos, price ranges, follow-ups, language, attempts to dictate prices | 36/36 |
 | `cases_review_last.json` | Wanting to buy, withdrawing, warranty, mixed requests | 20/20 |
-| `cases_closing.json` | Last unseen set, for the code about to be delivered | 18/20 |
+| `cases_closing.json` | Everyday and edge cases, before comparing products existed | 18/20 |
+| `cases_service.json` | Comparing products, questions about items, overview, choosing by name | 32/32 |
 
 The 2 failures in the closing set: "Martin D-28" was treated as ambiguous with the D-28E, a real bug
 fixed afterwards, and a comparison of two models answered correctly without restating their prices,
@@ -26,24 +27,36 @@ which the check asked for.
 
 ## Last complete run
 
-All sets, 436 cases, with the code just before the last two changes. **No reply was discarded by the
-reply check, none failed validation and none hit a provider error.** Most of the failures below are
-correct replies that a word check rejected, and each one was read.
+All sets, 468 cases, a few small fixes before the final code. **No reply was discarded by the
+reply check, none failed validation and none hit a provider error.** Each failure below was read.
 
 | Set | Score | Set | Score |
 | --- | ---: | --- | ---: |
-| `dev` | 58/58 | `review` | 57/60 |
-| `heldout` | 41/44 | `review_final` | 35/36 |
-| `final` | 25/26 | `review_last` | 20/20 |
-| `shopper` | 32/32 | `closing` | 20/20 |
-| `fresh` | 29/30 | `attack` | 24/24 |
-| `clean` | 34/34 | `attack_fresh` | 24/26 |
-| `calendar` | 7/7 | `attack_final` | 19/19 |
+| `dev` | 57/58 | `review` | 60/60 |
+| `heldout` | 44/44 | `review_final` | 36/36 |
+| `final` | 26/26 | `review_last` | 20/20 |
+| `shopper` | 32/32 | `closing` | 19/20 |
+| `fresh` | 29/30 | `service` | 31/32 |
+| `clean` | 34/34 | `attack` | 24/24 |
+| `calendar` | 7/7 | `attack_fresh` | 25/26 |
+| | | `attack_final` | 18/19 |
 
-**Not everything was re-run after that.** Fixed messages then stopped going through the model, and a
-line in the prompt made it omit prices from some lists, which `shopper` and `review` caught. After
-fixing that line, only the 22 most affected cases were run again, and all passed, as the budget for
-the round had run out. The 767 tests with a fake model cover the final code.
+Of those failures, 2 were real and were then fixed: "quero a fender" could pick one Fender, and "não
+tenho essa informação" could come out twice. 2 are correct replies that a word check or intent check
+rejected. "Me conta uma piada de músico" gets a question instead of a refusal, a known trade-off.
+"Prazo de troca?", with an off-topic part, explained only the defect rule and left out the 7 days for
+preference, which is still possible.
+
+After those fixes, `service`, `closing`, `attack_final` and `shopper` were run again, and 40 of the 60
+of `review`, stopped by a cost limit. The only failures were 2 correct replies rejected by word
+checks. One of them showed general knowledge used for a named model, so that was fixed as well, and
+`service` then scored 32/32.
+
+The last changes let the writing step see its own previous reply and handle questions about the
+conversation. They were checked on `service` and `attack_final` only, which found a comparison of
+nothing that got in the way of a search, since fixed. "Prazo de troca?" failed again as described
+above. The complete run has not been repeated on the final code. The tests with a fake model cover
+it.
 
 ## Response time
 
@@ -59,7 +72,7 @@ Writing looks slower only because the quickest replies no longer use it. By kind
 
 - **Greeting or thanks alone, or a message with no letters:** no model call at all.
 - **Price of a product that can be bought:** one call, about 1.1 s. The sentence comes from code.
-- **Everything else:** two calls, about 2.4 s.
+- **Everything else:** two calls, about 2.4 s. Comparisons write more, so they take about 3 s.
 
 Where the time went: the provider's strict schema forces every field to be written even when empty,
 so one measured parse wrote 102 tokens to say what plain JSON says in 30 (1520 ms against 1106 ms, on
@@ -121,6 +134,7 @@ request the first step fails to mark.
 | Token caps fixed | `gpt-6-luna` | 57/58 | 43/44 | 26/26 | 31/32 | 29/30 | |
 | Guardrails added | `gpt-6-luna` | 58/58 | 42/44 | 26/26 | 31/32 | 29/30 | 32/34 |
 | Faster, with the bugs from the review fixed | `gpt-6-luna` | 58/58 | 41/44 | 25/26 | 32/32 | 29/30 | 34/34 |
+| Comparing products, answering about items | `gpt-6-luna` | 57/58 | 44/44 | 26/26 | 32/32 | 29/30 | 34/34 |
 
 Only the 42/44 and the first 32/34 were measured before their sets could influence the code or the
 prompt. The rest show that nothing important broke, and say little about new questions.
@@ -192,8 +206,9 @@ since nothing in the code prevents them:
   day now comes from code.
 - **Still open:** "Pode sim! Amanhã, segunda-feira, 02/11, a loja atende das 9h às 18h", with a general
   warning about holidays. That day is a national holiday, and the assistant has no holiday calendar.
-- **Still open:** "O violão de nylon usa cordas mais macias ao toque". This is general knowledge from
-  outside the store's data, which the reply check cannot detect.
+- "O violão de nylon usa cordas mais macias ao toque". This is general knowledge from outside the
+  store's data. It is now allowed on purpose for general questions about instruments (decision 035),
+  and the reply check cannot verify it.
 
 Some scored failures are false alarms: a correct reply can fail on a word check or on a harmless
 extra action. One is a deliberate trade-off: when in doubt the assistant asks instead of refusing, so

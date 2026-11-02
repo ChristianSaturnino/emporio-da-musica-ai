@@ -39,10 +39,12 @@ CONVERSATIONS = (
         slug="01_catalog",
         title="Catalog search and availability",
         shows=(
-            "A search with stock and price filters, a product that is active but out of stock, "
-            "and an accessory, which the store does not sell."
+            "An overview worked out from the catalog, a search with stock and price filters, a "
+            "product that is active but out of stock, and an accessory, which the store does not "
+            "sell."
         ),
         messages=(
+            "Quais produtos vocês têm aí?",
             "Quais opções de violões disponíveis custando até R$1000?",
             "Tem Giannini GF-3D?",
             "Vocês vendem pedal de guitarra?",
@@ -93,14 +95,18 @@ CONVERSATIONS = (
     ),
     Conversation(
         slug="05_multi_intent",
-        title="Two requests in one message",
+        title="Several requests, and helping a customer choose",
         shows=(
-            "One message answered from two sources, and another that asks for the cheapest product "
-            "and then refers to it."
+            "One message answered from two sources, the cheapest product and a reference to it, a "
+            "name shared by two items of a list, and a comparison based on the catalog."
         ),
         messages=(
             "Qual o horário de sábado e tem violões até R$ 1.000?",
             "Me mostra o ukulele mais barato. E esse tem desconto?",
+            "E guitarras, quais vocês têm?",
+            "Quero a Fender",
+            "Qual a diferença entre a Telecaster e a Stratocaster?",
+            "Toco mais blues e rock clássico, qual combina mais comigo?",
         ),
     ),
 )

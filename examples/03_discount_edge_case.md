@@ -16,4 +16,4 @@ List and PIX prices, a follow-up that refers to the previous product, a product 
 
 **Assistente:** Ohana CK-20 Concert Natural está com 20% de desconto: de R$ 549,00 por R$ 439,20. O desconto do PIX não se soma à promoção.
 
-Não tenho informação sobre uma promoção ativa para o Ohana CK-20. Promoções não são cumulativas: o desconto de 5% no PIX não se aplica sobre preços promocionais.
+Não tenho a informação sobre uma promoção ativa para o Ohana CK-20. Promoções não acumulam com o desconto do PIX: os 5% no PIX não se aplicam sobre preços promocionais.

@@ -9,6 +9,7 @@ from emporio_ai.domain.normalization import normalize_text, search_tokens, token
 from emporio_ai.domain.pricing import availability_of, quote_price
 from emporio_ai.domain.schemas import (
     Availability,
+    CategoryOverview,
     LookupStatus,
     Product,
     ProductCandidate,
@@ -91,6 +92,38 @@ def find_category_mention(repo: Repository, text: str) -> str | None:
         if word not in _NON_DISTINCTIVE_CATEGORY_WORDS
     }
     return next((word for word in word_tokens(text) if word in category_words), None)
+
+
+def catalog_overview(repo: Repository) -> tuple[CategoryOverview, ...]:
+    """Summarize what can be bought now, by category, from the products themselves."""
+    by_category: dict[str, list[Decimal]] = {}
+    for product in repo.find_products(limit=MAX_LIMIT):
+        offer = _to_offer(repo, product)
+        if offer.availability is Availability.AVAILABLE:
+            by_category.setdefault(product.category_name, []).append(offer.quote.effective_price)
+    overview = [
+        CategoryOverview(category=name, available_products=len(prices), lowest_price=min(prices))
+        for name, prices in by_category.items()
+    ]
+    return tuple(sorted(overview, key=lambda entry: entry.lowest_price))
+
+
+def products_named_in(repo: Repository, text: str, product_ids: list[int]) -> list[Product]:
+    """Return the products of a list that the customer's words point to.
+
+    "Quero a fender" points to both Fenders of a list, and the model tended to pick one. Words
+    shared by the whole list, like "natural" in a list of natural guitars, tell nothing apart.
+    """
+    products = [product for i in product_ids if (product := repo.get_product(i)) is not None]
+    names = {product.product_id: set(tokenize(product.name)) for product in products}
+    if len(names) < 2:
+        return []
+    known = set().union(*names.values())
+    shared = set.intersection(*names.values())
+    words = {word for word in search_tokens(text) if not word.isdigit()} & known - shared
+    if not words:
+        return []
+    return [product for product in products if words <= names[product.product_id]]
 
 
 def correct_typos(repo: Repository, text: str | None) -> str | None:

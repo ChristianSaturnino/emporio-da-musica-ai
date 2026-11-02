@@ -112,6 +112,14 @@ class ProductDetails(Record):
     alternatives: tuple[ProductOffer, ...] = ()
 
 
+class CategoryOverview(Record):
+    """What can be bought today in one category, for someone who has not chosen yet."""
+
+    category: str
+    available_products: int
+    lowest_price: Decimal
+
+
 class ProductCandidate(Record):
     product_id: int
     name: str
@@ -198,6 +206,9 @@ class IntentType(StrEnum):
     PRODUCT_SEARCH = "product_search"
     PRODUCT_DETAILS = "product_details"
     PRODUCT_PRICE = "product_price"
+    PRODUCT_COMPARISON = "product_comparison"
+    INSTRUMENT_QUESTION = "instrument_question"
+    CONVERSATION_FOLLOWUP = "conversation_followup"
     ORDER_STATUS = "order_status"
     ORDER_CHANGE = "order_change"
     POLICY_QUESTION = "policy_question"
@@ -225,6 +236,8 @@ class ActionRequest(ModelOutput):
     product_query: str | None = None
     refers_to_previous_product: bool | None = None
     position_in_list: int | None = None
+    compared_products: list[str] | None = None
+    compared_positions: list[int] | None = None
     category: str | None = None
     min_price_brl: Decimal | None = None
     max_price_brl: Decimal | None = None

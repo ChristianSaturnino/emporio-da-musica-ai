@@ -349,3 +349,32 @@ When a search finds nothing, words that no product uses are replaced by the clos
 with `difflib`. It only runs after a failed search, so a correct name never changes, and short words
 and codes are left alone, since "C41" is not a typo of "C40". "Martin D-28" now means the D-28, as it
 names that model in whole words. Only a brand alone is treated as ambiguous.
+
+## 035. A service agent answers about what it sells
+
+The challenge asks for a service agent, and a real conversation showed the gap: "quais produtos você
+tem?" was answered with a question, and comparing two guitars had no path at all. The catalog already
+holds what is needed: all 65 products have a description and specs.
+
+- **What the store has** is worked out from the products: what can be bought in each category and
+  its lowest price. The model only words it, and nothing about it is typed by hand.
+- **Comparing products** has its own intent. Python resolves each name to one product, or asks which
+  one, and hands over what the catalog says about each. Prices remain subject to the reply check.
+- **Questions about a product** are answered from its description and specs, in plain words.
+- **A name in the last list.** "Quero a fender" with two Fenders listed asks which one. The model was
+  picking one by itself, so this is decided in code, comparing the words with the listed names.
+
+General questions about instruments, such as what a pickup is, are the one place where the model may
+use its own knowledge. A store attendant is expected to answer them, and refusing made the agent seem
+less capable than it is. This is a real trade-off, as the reply check cannot verify such an answer.
+So the rule is narrow: it applies to instruments only, it cannot state a price, stock, deadline or
+promotion, and a message naming a model the store sells goes to the catalog instead. Unrelated
+subjects are still refused.
+
+The tone was changed by instructing the writing step to answer first, use what the customer said and
+avoid stock phrases. Fixed messages stay fixed, as they carry rules that must not be reworded.
+
+Longer history was considered and not adopted. In "então por que perguntou?", the interpreting step
+already had the question in its context, and the writing step never saw its own replies, so length
+was not the cause. The writing step now receives its last reply, which counts as evidence since it
+already passed the reply check, and questions about the conversation have their own intent.
