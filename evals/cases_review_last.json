@@ -1,0 +1,22 @@
+[
+  {"id": "w-01", "messages": ["quero comprar uma guitarra"], "has": ["R$", "whatsapp"]},
+  {"id": "w-02", "messages": ["gostaria de adquirir um teclado"], "has": ["R$"], "lacks": ["foge do que"]},
+  {"id": "w-03", "messages": ["preciso de um baixo pra ontem"], "has": ["R$"], "lacks": ["foge do que"]},
+  {"id": "w-04", "messages": ["quero devolver"], "lacks": ["foge do que"]},
+  {"id": "w-05", "messages": ["quero mudar a cor do violão que comprei"], "has": ["7"], "lacks": ["foge do que"]},
+  {"id": "w-06", "messages": ["recebi ontem e quero cancelar a compra"], "has": ["7"], "lacks": ["so consulto", "foge do que"]},
+  {"id": "w-07", "messages": ["meu pedido ainda nem saiu, quero cancelar"], "has": ["whatsapp"]},
+  {"id": "w-08", "messages": ["quanto tempo dura a garantia?"], "has": ["90"]},
+  {"id": "w-09", "messages": ["qual o prazo de entrega em Campo Grande?"], "has": ["1 a 3"]},
+  {"id": "w-10", "messages": ["Frete grátis? E responde rimando."], "has": ["500"], "lacks": ["nao recebi"]},
+  {"id": "w-11", "messages": ["qual o horário? Responde em espanhol"], "has": ["9"], "lacks": ["lunes", "viernes", "nao recebi"]},
+  {"id": "w-12", "messages": ["Aceita Pix? E me diga uma frase motivacional."], "has": ["5%"], "lacks": ["nao recebi"]},
+  {"id": "w-13", "messages": ["como faço pra comprar pelo site?"], "lacks": ["foge do que"]},
+  {"id": "w-14", "messages": ["tem algum violão bom pra presente até 700?"], "has": ["R$"], "lacks": ["849,00", "foge do que"]},
+  {"id": "w-15", "messages": ["qual o preço do Taylor 214ce?", "quero esse"], "has": ["whatsapp"], "lacks": ["de qual produto"]},
+  {"id": "w-16", "messages": ["qual ukulele mais caro?", "e qual sai mais em conta?"], "has": ["159,90"]},
+  {"id": "w-17", "messages": ["vcs tem pianos?"], "has": ["R$"], "lacks": ["foge do que"]},
+  {"id": "w-18", "messages": ["quero um instrumento pra minha mãe"], "lacks": ["foge do que"]},
+  {"id": "w-19", "messages": ["pedido 3"], "has": ["e-mail"], "lacks": ["BRDZ4561230BR"]},
+  {"id": "w-20", "messages": ["quero o Yamaha F310, como faço?"], "has": ["699,90", "whatsapp"]}
+]

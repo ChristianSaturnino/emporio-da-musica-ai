@@ -6,7 +6,7 @@ One message answered from two sources, and another that asks for the cheapest pr
 
 **Cliente:** Qual o horário de sábado e tem violões até R$ 1.000?
 
-**Assistente:** Aos sábados, atendemos das 09h às 13h. Fechamos em feriados.
+**Assistente:** Aos sábados, atendemos das 09h às 13h. A loja fecha em feriados.
 
 Temos estas opções de violões até R$ 1.000:
 
@@ -16,8 +16,8 @@ Temos estas opções de violões até R$ 1.000:
 - Giannini GF-1R Aço Folk Sunburst — R$ 579,90; no PIX, R$ 550,91.
 - Yamaha C40 Nylon Natural — R$ 599,90; no PIX, R$ 569,91.
 
-Há mais opções nessa faixa. Se quiser, posso refinar a busca por tipo de corda ou estilo.
+Há mais opções nessa faixa. Quer refinar a busca por tipo de corda ou estilo?
 
 **Cliente:** Me mostra o ukulele mais barato. E esse tem desconto?
 
-**Assistente:** O ukulele mais barato é o Shelby SU-21S Soprano Sunburst, por R$ 159,90. No PIX, fica R$ 151,91. Não há promoção ativa no momento; o desconto do PIX é de 5% sobre o preço de tabela.
+**Assistente:** O mais barato é o Shelby SU-21S Soprano Sunburst, por R$ 159,90 na tabela ou R$ 151,91 no PIX. Não há promoção ativa no momento; o desconto de 5% é no PIX.

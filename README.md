@@ -70,7 +70,7 @@ None of these commands call an external API: tests use a fake model and cannot r
 Two scripts do call the OpenAI API, which costs a small amount:
 
 ```bash
-python scripts/run_eval.py dev heldout final shopper fresh clean attack attack_fresh attack_final calendar
+python scripts/run_eval.py dev heldout final shopper fresh clean attack attack_fresh attack_final calendar review review_final review_last closing
 python scripts/record_examples.py
 ```
 
@@ -104,8 +104,9 @@ Enforced by code, whatever the model does:
 
 - **Customer data is out of reach.** No tool lists customers, and a verified order returns no name,
   phone or email. The email check runs in Python on an address the model never sees.
-- **The model cannot choose what runs.** It fills a fixed schema, and each of the 9 intents runs one
-  known handler. There is no loop, and no text from the first step reaches the customer.
+- **The model cannot choose what runs.** Its output is validated against a fixed structure that
+  rejects unknown fields, and each of the 10 intents runs one known handler. There is no loop, and no
+  text from the first step reaches the customer.
 - **Off-topic questions cost nothing to refuse.** They get a fixed message without a second call.
 - **Replies are checked against what the store said.** Amounts, percentages, tracking codes, emails,
   phone numbers, links, free offers and long passages of the prompts are rejected unless they are in
@@ -134,9 +135,10 @@ See [evals/RESULTS.md](evals/RESULTS.md) for how this was measured.
 ## Security and privacy limitations
 
 Order lookup asks for the order ID and the email of the customer who placed it, and it returns only
-the status, date, items, tracking code and estimated delivery. **This is a simulated check, not
-authentication.** All data here is fictional and public, including the emails that pass the check,
-and attempts are not limited. A production system would need real login or one-time codes,
+the status, date, items, tracking code and estimated delivery. Once checked, that one order can be
+asked about again in the same conversation, without the email being kept. **This is a simulated
+check, not authentication.** All data here is fictional and public, including the emails that pass
+the check, and attempts are not limited. A production system would need real login or one-time codes,
 session-based authorization, rate limiting, auditing and a private database.
 
 Only email addresses are masked before reaching the provider. A CPF or phone number typed into the

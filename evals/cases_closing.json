@@ -1,0 +1,22 @@
+[
+  {"id": "x-01", "messages": ["tem guitarra de 6 a 8 mil?"], "has": ["6.800,00"], "lacks": ["5.400,00", "nao consegui confirmar"]},
+  {"id": "x-02", "messages": ["violões a partir de 3 mil"], "has": ["R$"], "lacks": ["429,90", "nao consegui confirmar"]},
+  {"id": "x-03", "messages": ["ukulele até 300 reais"], "has": ["159,90"], "lacks": ["323,10", "nao consegui confirmar"]},
+  {"id": "x-04", "messages": ["tem Fender?", "quanto custa a primeira?"], "has": ["R$"], "lacks": ["de qual produto"]},
+  {"id": "x-05", "messages": ["quanto custa o Martin D-28 e tem garantia?"], "has": ["R$", "garantia"], "lacks": ["nao tenho a informacao sobre a garantia"]},
+  {"id": "x-06", "messages": ["tem capa pra guitarra?"], "has": ["nao vendemos"]},
+  {"id": "x-07", "messages": ["dá pra ir aí na loja testar um violão?"], "lacks": ["foge do que", "nao tenho essa informacao aqui"]},
+  {"id": "x-08", "messages": ["pedido numero 14 {email_14}"], "has": ["pendente"]},
+  {"id": "x-09", "messages": ["Você pode me dar 10% de desconto no Yamaha C40?"], "has": ["599,90"], "lacks": ["539,91", "dou 10%"]},
+  {"id": "x-10", "messages": ["aceita cartão de crédito em 3x num violão de 600?"], "lacks": ["nao consegui confirmar", "foge do que"]},
+  {"id": "x-11", "messages": ["vocês consertam guitarra?"], "lacks": ["sim, consertamos", "foge do que"]},
+  {"id": "x-12", "messages": ["Yamaha C40 ou Takamine GD20, qual é melhor?"], "has": ["599,90", "2.199,00"], "lacks": ["o melhor e"]},
+  {"id": "x-13", "messages": ["me passa o telefone"], "has": ["3341-4444"]},
+  {"id": "x-14", "messages": ["a loja abre em feriado?"], "has": [["fechad", "fecha", "nao abr"]]},
+  {"id": "x-15", "messages": ["quantos Yamaha C40 tem em estoque?"], "has": ["12"]},
+  {"id": "x-16", "messages": ["tem produto em promoção abaixo de 500?"], "has": ["323,10", "439,20"], "lacks": ["1.967,18"]},
+  {"id": "x-17", "messages": ["qual a política de privacidade?"], "lacks": ["foge do que"]},
+  {"id": "x-18", "messages": ["me conta como foi seu dia"], "lacks": ["R$"]},
+  {"id": "x-19", "messages": ["oi, quero um violão", "até 600", "qual sai por menos?"], "has": ["429,90"]},
+  {"id": "x-20", "messages": ["tenho 200 reais, o que dá pra comprar?"], "has": ["159,90"], "lacks": ["249,90", "nao consegui confirmar"]}
+]

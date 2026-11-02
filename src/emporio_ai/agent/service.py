@@ -15,6 +15,8 @@ from emporio_ai.domain.errors import ConfigurationError
 from emporio_ai.observability.events import elapsed_ms, log_event, turn_context
 
 MAX_MESSAGE_LENGTH = 1000
+# Sessions live in memory, so a long-running app must forget the oldest ones.
+MAX_SESSIONS = 1000
 
 
 class ConversationService:
@@ -26,7 +28,8 @@ class ConversationService:
 
     def chat(self, session_id: str, message: str) -> str:
         text = message.strip()
-        if not text:
+        # "??" or an emoji has nothing to interpret, so no call is spent on it.
+        if not any(character.isalnum() for character in text):
             return prompts.EMPTY_MESSAGE
         if len(text) > MAX_MESSAGE_LENGTH:
             return prompts.TOO_LONG_MESSAGE
@@ -45,6 +48,7 @@ class ConversationService:
                         "last_product_id": session.get("last_product_id"),
                         "last_result_ids": session.get("last_result_ids", []),
                         "pending_order_id": session.get("pending_order_id"),
+                        "verified_order_id": session.get("verified_order_id"),
                         "user_message": masked_message,
                         "customer_email": customer_email,
                     }
@@ -71,12 +75,17 @@ class ConversationService:
             else:
                 log_event("turn_completed", result="success", latency_ms=elapsed_ms(started))
 
+        self._sessions.pop(session_id, None)
         self._sessions[session_id] = {
             "messages": result["messages"],
             "last_product_id": result.get("last_product_id"),
             "last_result_ids": result.get("last_result_ids", []),
             "pending_order_id": result.get("pending_order_id"),
+            "verified_order_id": result.get("verified_order_id"),
         }
+        if len(self._sessions) > MAX_SESSIONS:
+            # Dictionaries keep insertion order, and active sessions were just moved to the end.
+            del self._sessions[next(iter(self._sessions))]
         return result["reply"]
 
     def reset(self, session_id: str) -> None:

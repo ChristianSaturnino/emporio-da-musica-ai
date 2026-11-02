@@ -1,10 +1,12 @@
 """Optional command-line chat, for a quick check without opening a browser."""
 
+import logging
 import sys
 from collections.abc import Callable
 
 from emporio_ai.agent.service import ConversationService, create_service
 from emporio_ai.domain.errors import ConfigurationError, DatabaseNotFoundError, DatasetError
+from emporio_ai.observability import events
 
 SESSION_ID = "cli"
 EXIT_COMMANDS = {"sair", "exit", "quit"}
@@ -28,6 +30,8 @@ def run_chat(
 
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
+    # Without a handler, Python would print warning events in the middle of the chat.
+    events.logger.addHandler(logging.NullHandler())
     try:
         service = create_service()
     except (ConfigurationError, DatabaseNotFoundError, DatasetError) as exc:

@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL = "gpt-6-luna"
-DEFAULT_REASONING_EFFORT = "low"
+# Measured against "low": about 20% faster and the same score on the clean set.
+DEFAULT_REASONING_EFFORT = "none"
 
 
 @dataclass(frozen=True)

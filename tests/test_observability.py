@@ -8,7 +8,7 @@ import pytest
 
 from emporio_ai.agent.llm import OpenAILLM
 from emporio_ai.domain.errors import LLMOutputError, LLMUnavailableError
-from emporio_ai.domain.schemas import ActionRequest, IntentType, ParsedTurn, StoreTopic
+from emporio_ai.domain.schemas import StoreTopic
 from emporio_ai.observability import events
 from tests.helpers import FakeLLM, order, search, store, turn
 
@@ -172,18 +172,17 @@ def test_prompt_text_is_never_logged(make_service, caplog, logged):
 
 def test_token_usage_is_logged_for_real_model_calls(logged):
     usage = SimpleNamespace(prompt_tokens=100, completion_tokens=20)
-    parsed = ParsedTurn(
-        actions=[ActionRequest(intent=IntentType.GREETING)], needs_clarification=False
-    )
+    content = '{"actions": [{"intent": "greeting"}]}'
     completion = SimpleNamespace(
         usage=usage,
-        choices=[SimpleNamespace(message=SimpleNamespace(parsed=parsed))],
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
     )
-    completions = SimpleNamespace(parse=lambda **_: completion)
+    completions = SimpleNamespace(create=lambda **_: completion)
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
     OpenAILLM(api_key="not-a-real-key", model="m", client=client).parse_turn([])
     entry = last(logged(), "llm_call")
     assert (entry["kind"], entry["input_tokens"], entry["output_tokens"]) == ("parse", 100, 20)
+    assert entry["latency_ms"] >= 0
 
 
 def test_configure_logging_can_be_called_repeatedly():

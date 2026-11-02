@@ -5,10 +5,14 @@ from decimal import Decimal
 
 import pytest
 
-from emporio_ai.agent.prompts import COMPOSE_SYSTEM_PROMPT, UNDERSTAND_SYSTEM_PROMPT
+from emporio_ai.agent.prompts import (
+    COMPOSE_SYSTEM_PROMPT,
+    GREETING_MESSAGE,
+    UNDERSTAND_SYSTEM_PROMPT,
+)
 from emporio_ai.domain.normalization import normalize_text
 from emporio_ai.domain.schemas import IntentType, ParsedTurn
-from scripts.run_eval import SET_NAMES, load_cases, score_case, summarize
+from scripts.run_eval import SET_NAMES, RecordingLLM, load_cases, run_case, score_case, summarize
 from tests.helpers import act, order, price, search, turn
 
 
@@ -120,6 +124,27 @@ def test_sections_are_read_from_the_facts():
 def test_forbidden_text_fails():
     case = {"id": "x", "lacks": ["Paris"]}
     assert not score_case(case, turn(), "", "A capital é Paris").passed
+
+
+class _Stub:
+    def __init__(self, reply):
+        self.reply = reply
+
+    def chat(self, _session, _message):
+        return self.reply
+
+
+def test_greeting_answered_without_a_model_call_counts_as_a_greeting():
+    recorder = RecordingLLM(inner=None)
+    case = {"id": "x", "messages": ["oi"], "intents": [["greeting"]]}
+    result = run_case(lambda: _Stub(GREETING_MESSAGE), recorder, case, str)
+    assert result.passed, result.problems
+
+
+def test_what_an_earlier_message_understood_does_not_leak_into_the_score():
+    recorder = RecordingLLM(inner=None, parsed=turn(search()))
+    case = {"id": "x", "messages": ["oi"], "intents": [["product_search"]]}
+    assert not run_case(lambda: _Stub("Texto"), recorder, case, str).passed
 
 
 def test_summary_counts_each_check():

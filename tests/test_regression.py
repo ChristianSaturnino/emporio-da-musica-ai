@@ -34,9 +34,9 @@ def test_catalog(make_service):
 
 def test_price_of_an_exact_product(make_service):
     llm = FakeLLM(turn(price(product_query="Takamine GD20")))
-    make_service(llm).chat(SESSION, "Quanto custa o Takamine GD20?")
-    assert "Takamine GD20 Dreadnought Natural" in llm.facts
-    assert "R$ 2.199,00" in llm.facts
+    reply = make_service(llm).chat(SESSION, "Quanto custa o Takamine GD20?")
+    assert "Takamine GD20 Dreadnought Natural" in reply
+    assert "R$ 2.199,00" in reply
 
 
 def test_price_of_an_ambiguous_product_asks_which(make_service):
@@ -59,10 +59,11 @@ def test_promotion_is_not_stacked_with_pix(make_service):
     )
     service = make_service(llm)
     service.chat(SESSION, "Quanto custa o Ohana CK-20?")
-    service.chat(SESSION, "Esse modelo tem desconto? E no PIX?")
-    assert '"promotion_percent": 20' in llm.facts
-    assert "R$ 439,20" in llm.facts
-    assert "pix_price" not in llm.facts
+    reply = service.chat(SESSION, "Esse modelo tem desconto? E no PIX?")
+    assert "20% de desconto" in reply
+    assert "R$ 439,20" in reply
+    assert "não se soma" in reply
+    assert "R$ 417" not in reply
 
 
 def test_store_hours(make_service):

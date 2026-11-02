@@ -2,9 +2,10 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
+from difflib import get_close_matches
 
 from emporio_ai.data.repository import MAX_LIMIT, Repository
-from emporio_ai.domain.normalization import normalize_text, tokenize, word_tokens
+from emporio_ai.domain.normalization import normalize_text, search_tokens, tokenize, word_tokens
 from emporio_ai.domain.pricing import availability_of, quote_price
 from emporio_ai.domain.schemas import (
     Availability,
@@ -22,6 +23,9 @@ from emporio_ai.domain.scope import find_unsold_item
 MAX_RESULTS = 5
 MAX_ALTERNATIVES = 3
 MAX_CANDIDATES = 5
+
+_MIN_TYPO_LENGTH = 5
+_TYPO_CUTOFF = 0.8
 
 _GENERIC_PRODUCT_WORDS = frozenset(word_tokens("instrumentos musicais produtos itens opções"))
 _NON_DISTINCTIVE_CATEGORY_WORDS = frozenset(word_tokens("instrumentos de e madeiras metais cordas"))
@@ -89,6 +93,27 @@ def find_category_mention(repo: Repository, text: str) -> str | None:
     return next((word for word in word_tokens(text) if word in category_words), None)
 
 
+def correct_typos(repo: Repository, text: str | None) -> str | None:
+    """Replace words that no product or category uses with the closest one that does.
+
+    Only used after a search finds nothing, so a correct name is never changed. "Yamha" and
+    "guitara" were told the product does not exist. Short words and codes are left alone, as they
+    are too easily mistaken: "C40" is not a typo of "C70".
+    """
+    if not text:
+        return text
+    names = [product.name for product in repo.find_products(limit=MAX_LIMIT)]
+    names += [category.name for category in repo.list_categories()]
+    known = {word for name in names for word in tokenize(name)}
+
+    def closest(word: str) -> str:
+        if word in known or len(word) < _MIN_TYPO_LENGTH or not word.isalpha():
+            return word
+        return next(iter(get_close_matches(word, known, n=1, cutoff=_TYPO_CUTOFF)), word)
+
+    return " ".join(closest(word) for word in tokenize(text))
+
+
 def search_products(
     repo: Repository,
     term: str | None = None,
@@ -98,10 +123,47 @@ def search_products(
     on_promotion: bool = False,
     limit: int = MAX_RESULTS,
     most_expensive_first: bool = False,
+    min_price: Decimal | None = None,
+) -> ProductSearchResult:
+    """Search the catalog, trying again with typos corrected if nothing was found."""
+
+    def search(term: str | None, category: str | None) -> ProductSearchResult:
+        return _search(
+            repo,
+            term,
+            category,
+            max_price,
+            only_available,
+            on_promotion,
+            limit,
+            most_expensive_first,
+            min_price,
+        )
+
+    result = search(term, category)
+    if result.products or result.unsold_item:
+        return result
+    corrected = correct_typos(repo, term), correct_typos(repo, category)
+    if corrected == (term, category):
+        return result
+    second_try = search(*corrected)
+    return second_try if second_try.products else result
+
+
+def _search(
+    repo: Repository,
+    term: str | None,
+    category: str | None,
+    max_price: Decimal | None,
+    only_available: bool,
+    on_promotion: bool,
+    limit: int,
+    most_expensive_first: bool,
+    min_price: Decimal | None,
 ) -> ProductSearchResult:
     """Search the catalog, returning the cheapest matches with their availability.
 
-    max_price applies to the effective price, which is the promotional price when there is an
+    Price limits apply to the effective price, which is the promotional price when there is an
     active promotion and the list price otherwise. PIX is left out because it depends on how the
     customer chooses to pay.
 
@@ -147,6 +209,8 @@ def search_products(
         offers = available or offers
     if max_price is not None:
         offers = [offer for offer in offers if offer.quote.effective_price <= max_price]
+    if min_price is not None:
+        offers = [offer for offer in offers if offer.quote.effective_price >= min_price]
     if on_promotion:
         offers = [offer for offer in offers if offer.quote.promotion_percent is not None]
     offers.sort(key=_sort_key)
@@ -176,9 +240,14 @@ def _lookup_product(repo: Repository, product_id: int | None, name: str | None) 
     if not name or not name.strip():
         return _Lookup(LookupStatus.NOT_FOUND)
 
-    matches = repo.find_products(name, limit=MAX_LIMIT)
+    matches = repo.find_products(name, limit=MAX_LIMIT) or repo.find_products(
+        correct_typos(repo, name), limit=MAX_LIMIT
+    )
     exact = [p for p in matches if normalize_text(p.name) == normalize_text(name)]
-    matches = exact or matches
+    # "Martin D-28" matches "Martin D-28E" as text, but it only names the D-28.
+    words = set(search_tokens(name))
+    whole_words = [p for p in matches if words <= set(tokenize(p.name))]
+    matches = exact or whole_words or matches
     if not matches:
         return _Lookup(LookupStatus.NOT_FOUND)
     if len(matches) == 1:

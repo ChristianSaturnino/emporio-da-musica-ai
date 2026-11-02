@@ -14,8 +14,10 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
+from statistics import median
 from typing import Any
 
+from emporio_ai.agent import prompts
 from emporio_ai.agent.graph import _clean_actions
 from emporio_ai.agent.llm import OpenAILLM
 from emporio_ai.agent.service import ConversationService
@@ -23,7 +25,7 @@ from emporio_ai.config import PROJECT_ROOT, get_settings
 from emporio_ai.data.policy_index import build_policy_index
 from emporio_ai.data.repository import Repository, connect_read_only
 from emporio_ai.domain.normalization import normalize_text
-from emporio_ai.domain.schemas import ParsedTurn
+from emporio_ai.domain.schemas import ActionRequest, IntentType, ParsedTurn
 from emporio_ai.observability import events
 
 EVALS_DIR = PROJECT_ROOT / "evals"
@@ -38,6 +40,10 @@ SET_NAMES = (
     "attack_fresh",
     "attack_final",
     "calendar",
+    "review",
+    "review_final",
+    "review_last",
+    "closing",
 )
 # Input and output prices per 1M tokens, from the OpenAI pricing pages. Cached input is cheaper, so
 # the costs reported here are an upper bound.
@@ -150,8 +156,13 @@ def run_case(
     service = make_service()
     reply = ""
     for message in case["messages"]:
+        # Some turns call no model, so what is left here could belong to an earlier message.
+        recorder.parsed, recorder.facts = None, ""
         reply = service.chat(case["id"], fill_emails(message))
-    return score_case(case, recorder.parsed, recorder.facts, reply)
+    parsed = recorder.parsed
+    if parsed is None and reply in (prompts.GREETING_MESSAGE, prompts.FAREWELL_MESSAGE):
+        parsed = ParsedTurn(actions=[ActionRequest(intent=IntentType.GREETING)])
+    return score_case(case, parsed, recorder.facts, reply)
 
 
 class _UsageCounter:
@@ -161,13 +172,26 @@ class _UsageCounter:
         )
         self.input_tokens = 0
         self.output_tokens = 0
+        self.latencies: dict[str, list[int]] = {"parse": [], "compose": [], "turn": []}
 
     def filter(self, record: Any) -> bool:
         entry = json.loads(record.getMessage())
         if entry["event"] == "llm_call":
             self.input_tokens += entry["input_tokens"]
             self.output_tokens += entry["output_tokens"]
+            self.latencies[entry["kind"]].append(entry["latency_ms"])
+        elif entry["event"] == "turn_completed":
+            self.latencies["turn"].append(entry["latency_ms"])
         return False
+
+    def latency_report(self) -> str:
+        parts = []
+        for kind, values in self.latencies.items():
+            if values:
+                ordered = sorted(values)
+                p90 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.9))]
+                parts.append(f"{kind} median {median(ordered):.0f} ms, p90 {p90} ms")
+        return "; ".join(parts)
 
     @property
     def cost(self) -> Decimal:
@@ -211,7 +235,7 @@ def main() -> int:
     parser.add_argument("--max-cost", type=Decimal, default=Decimal("0.10"), help="stop at this")
     parser.add_argument("--only", help="only run cases whose ID starts with this")
     parser.add_argument("--model", help="override the configured model")
-    parser.add_argument("--effort", default="low", help="reasoning effort, for newer models")
+    parser.add_argument("--effort", help="override the configured reasoning effort")
     parser.add_argument("--json", type=Path, help="also write the full results to this file")
     parser.add_argument(
         "--summary-only",
@@ -228,7 +252,11 @@ def main() -> int:
     repo = Repository(settings.db_path)
     policy_index = build_policy_index(settings.data_dir / "politicas_da_loja.pdf")
     recorder = RecordingLLM(
-        OpenAILLM(api_key=settings.openai_api_key, model=model, reasoning_effort=args.effort)
+        OpenAILLM(
+            api_key=settings.openai_api_key,
+            model=model,
+            reasoning_effort=args.effort or settings.openai_reasoning_effort,
+        )
     )
     fill_emails = _email_filler(settings.db_path)
 
@@ -271,6 +299,7 @@ def main() -> int:
         f"\nTokens: input {usage.input_tokens}, output {usage.output_tokens}. "
         f"Cost: at most US$ {usage.cost:.4f}"
     )
+    print(f"Latency: {usage.latency_report()}")
     if args.json:
         args.json.write_text(json.dumps(output, ensure_ascii=False, indent=1), encoding="utf-8")
     return 0

@@ -43,7 +43,11 @@ def get_order_status(
         return OrderStatusResult(access=OrderAccess.EMAIL_REQUIRED)
     if not repo.order_email_matches(order_id, customer_email):
         return OrderStatusResult(access=OrderAccess.NOT_VERIFIED)
+    return get_verified_order(repo, order_id)
 
+
+def get_verified_order(repo: Repository, order_id: int) -> OrderStatusResult:
+    """Return the summary of an order whose email check has already passed in this conversation."""
     order = repo.get_order(order_id)
     if order is None:
         return OrderStatusResult(access=OrderAccess.NOT_VERIFIED)

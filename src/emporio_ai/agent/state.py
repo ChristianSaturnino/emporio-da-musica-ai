@@ -37,6 +37,8 @@ class ConversationState(TypedDict, total=False):
     last_product_id: int | None
     last_result_ids: list[int]
     pending_order_id: int | None
+    # The email itself is never kept. This only records that it was checked for this order.
+    verified_order_id: int | None
 
     # Valid for one turn only.
     user_message: str

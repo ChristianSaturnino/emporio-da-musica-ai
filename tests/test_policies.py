@@ -169,6 +169,12 @@ def test_pix_question_brings_payment_and_promotion_rules(index):
     assert {"3", "6.2"} <= set(section_ids(search_policies(index, "Tem desconto no PIX?")))
 
 
+def test_a_deadline_question_is_decided_by_its_subject(index):
+    # "Prazo" was a strong word for delivery, which pushed the legal warranty out of the results.
+    assert {"8.1", "8.2"} <= set(section_ids(search_policies(index, "prazo de garantia")))
+    assert "5.1" in section_ids(search_policies(index, "prazo de entrega"))
+
+
 def test_retrieval_ignores_case_and_accents(index):
     assert section_ids(search_policies(index, "HORARIO DE FUNCIONAMENTO")) == section_ids(
         search_policies(index, "horário de funcionamento")

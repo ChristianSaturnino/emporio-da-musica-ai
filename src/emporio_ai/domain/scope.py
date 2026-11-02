@@ -23,6 +23,9 @@ _UNSOLD_ITEMS = frozenset(
         "case",
         "corda",
         "correia",
+        "encordoamento",
+        "metronomo",
+        "microfone",
         "palheta",
         "pedal",
     }
@@ -30,7 +33,7 @@ _UNSOLD_ITEMS = frozenset(
 
 # "Cordas" also describes instruments: "violão de 7 cordas", "Cordas Orquestrais".
 _INSTRUMENT_PHRASES = re.compile(
-    r"\d+ cordas?|cordas? orquestra\w*|instrumentos? de cordas?|com cordas?"
+    r"\d+ cordas?|cordas? orquestra\w*|(?:instrumentos?|viol(?:ao|oes)) de cordas?|com cordas?"
 )
 
 
@@ -40,7 +43,10 @@ _STORE_WORD_ROOTS = frozenset(
     {
         "apren",
         "compr",
+        "devol",
         "escol",
+        "frete",
+        "garan",
         "indic",
         "instr",
         "music",
@@ -51,6 +57,7 @@ _STORE_WORD_ROOTS = frozenset(
         "produ",
         "recom",
         "tocar",
+        "troca",
         "vende",
     }
 )

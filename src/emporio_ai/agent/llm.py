@@ -1,6 +1,6 @@
 """Model provider adapter. The rest of the agent only knows the LLMClient protocol."""
 
-import json
+import time
 from typing import Protocol
 
 import openai
@@ -8,17 +8,21 @@ from pydantic import ValidationError
 
 from emporio_ai.domain.errors import LLMOutputError, LLMUnavailableError
 from emporio_ai.domain.schemas import ParsedTurn
-from emporio_ai.observability.events import log_event
+from emporio_ai.observability.events import elapsed_ms, log_event
 
 ChatMessage = dict[str, str]
 
-_TIMEOUT_SECONDS = 30
+_TIMEOUT_SECONDS = 20
 _TRANSPORT_RETRIES = 1
 _PARSE_ATTEMPTS = 2
 # Caps on what one call can cost. Reasoning tokens count against them: a parse measured at 243 of
 # reasoning and 425 in all, so a cap of 400 made harder messages fail on every attempt.
 _MAX_PARSE_TOKENS = 1000
 _MAX_REPLY_TOKENS = 1500
+# Plain JSON instead of the provider's strict schema, which forces every field to be written even
+# when null. Measured on the same messages: 30 output tokens instead of 102, and 1106 ms instead of
+# 1520 ms. ParsedTurn still validates the result, so nothing unchecked goes further.
+_JSON_OUTPUT = {"type": "json_object"}
 
 
 class LLMClient(Protocol):
@@ -27,14 +31,17 @@ class LLMClient(Protocol):
     def compose_reply(self, messages: list[ChatMessage]) -> str: ...
 
 
-def _log_usage(kind: str, completion: object) -> None:
+def _log_usage(kind: str, completion: object, started: float) -> None:
     usage = getattr(completion, "usage", None)
     if usage is not None:
+        details = getattr(usage, "completion_tokens_details", None)
         log_event(
             "llm_call",
             kind=kind,
             input_tokens=usage.prompt_tokens,
             output_tokens=usage.completion_tokens,
+            reasoning_tokens=getattr(details, "reasoning_tokens", None),
+            latency_ms=elapsed_ms(started),
         )
 
 
@@ -44,7 +51,7 @@ class OpenAILLM:
         api_key: str,
         model: str,
         client: openai.OpenAI | None = None,
-        reasoning_effort: str = "low",
+        reasoning_effort: str = "none",
     ) -> None:
         self._model = model
         self._reasoning_effort = reasoning_effort
@@ -59,37 +66,32 @@ class OpenAILLM:
         return {"reasoning_effort": self._reasoning_effort}
 
     def parse_turn(self, messages: list[ChatMessage]) -> ParsedTurn:
-        """Ask for a ParsedTurn using native structured output, retrying once on unusable output."""
+        """Ask for a ParsedTurn as JSON and validate it, retrying once on unusable output."""
         last_error: Exception | None = None
         for _ in range(_PARSE_ATTEMPTS):
+            started = time.perf_counter()
             try:
-                completion = self._client.chat.completions.parse(
+                completion = self._client.chat.completions.create(
                     model=self._model,
                     messages=messages,
-                    response_format=ParsedTurn,
+                    response_format=_JSON_OUTPUT,
                     max_completion_tokens=_MAX_PARSE_TOKENS,
                     store=False,
                     **self._sampling_options(temperature=0),
                 )
             except openai.APIError as exc:
                 raise LLMUnavailableError(type(exc).__name__) from exc
-            except (
-                ValidationError,
-                json.JSONDecodeError,
-                openai.LengthFinishReasonError,
-                openai.ContentFilterFinishReasonError,
-            ) as exc:
-                last_error = exc
-                continue
 
-            _log_usage("parse", completion)
-            parsed = completion.choices[0].message.parsed
-            if parsed is not None:
-                return parsed
-            last_error = None
+            _log_usage("parse", completion, started)
+            try:
+                # Also covers invalid JSON, such as an answer cut off by the token cap.
+                return ParsedTurn.model_validate_json(completion.choices[0].message.content or "")
+            except ValidationError as exc:
+                last_error = exc
         raise LLMOutputError("the model gave no usable structure") from last_error
 
     def compose_reply(self, messages: list[ChatMessage]) -> str:
+        started = time.perf_counter()
         try:
             completion = self._client.chat.completions.create(
                 model=self._model,
@@ -101,7 +103,7 @@ class OpenAILLM:
         except openai.APIError as exc:
             raise LLMUnavailableError(type(exc).__name__) from exc
 
-        _log_usage("compose", completion)
+        _log_usage("compose", completion, started)
         choice = completion.choices[0]
         content = (choice.message.content or "").strip()
         # A reply cut off by the token cap could end in the middle of a condition.

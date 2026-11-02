@@ -317,3 +317,35 @@ Other flows get no date, and the prompt forbids guessing one there.
 The date is the store's, on a fixed UTC-4, so a server elsewhere does not change the answer. There is
 no holiday calendar, as the data has none and municipal holidays would need upkeep. The reply warns
 that the store closes on holidays, which leaves a wrong "yes" possible on a holiday.
+
+## 033. Response time is spent where it was measured
+
+Timing each call showed that most of a turn is the two model calls, and that interpreting a message
+took longer than writing the reply, despite producing almost nothing. So:
+
+- **Plain JSON instead of the provider's strict schema.** Strict mode forces every field to be
+  written even when empty, 102 tokens against 30 on the same messages. This gives up the provider's
+  guarantee, so validation now rejects unknown fields, as the model invented one when first tried. In
+  436 measured cases, none failed validation. The plan preferred native structured output, and this
+  departs from it on purpose.
+- **Reasoning effort `none`.** About 300 ms faster when interpreting, with comparable scores.
+- **No model where its answer is already known.** A greeting takes no call. The price of a product
+  that can be bought is a sentence from code, since the model only ever wrote that same sentence. This
+  also removes a way of getting a price wrong. Fixed messages are appended rather than handed to the
+  model, which reworded them and once dropped a promotion's percentage.
+
+Streaming was left out, as the reply check needs the complete text before the customer sees it.
+
+## 034. Asking for less, without checking less
+
+A verified order can be asked about again in the same conversation, as "e quando chega?" asking for
+the email again felt broken. The email itself is still never kept: only the fact that it was checked
+for that one order, which ends with the session. Another order needs its own email.
+
+Requests to cancel or change an order have a fixed answer that hands over to the team, instead of
+asking for an email and then answering something else.
+
+When a search finds nothing, words that no product uses are replaced by the closest one that does,
+with `difflib`. It only runs after a failed search, so a correct name never changes, and short words
+and codes are left alone, since "C41" is not a typo of "C40". "Martin D-28" now means the D-28, as it
+names that model in whole words. Only a brand alone is treated as ambiguous.

@@ -199,6 +199,7 @@ class IntentType(StrEnum):
     PRODUCT_DETAILS = "product_details"
     PRODUCT_PRICE = "product_price"
     ORDER_STATUS = "order_status"
+    ORDER_CHANGE = "order_change"
     POLICY_QUESTION = "policy_question"
     STORE_INFORMATION = "store_information"
     HOW_TO_BUY = "how_to_buy"
@@ -206,22 +207,26 @@ class IntentType(StrEnum):
     OUT_OF_SCOPE = "out_of_scope"
 
 
-# ActionRequest and ParsedTurn are sent to the model as a schema, docstrings included, so they are
-# documented in comments to keep every call small.
-#
 # ActionRequest has no customer email and no product ID on purpose. Python extracts the email before
 # the model sees the message, and product references resolve against the session state.
 #
-# ParsedTurn has no text for the customer on purpose: nothing written in this step reaches them. Its
-# fields have no default, as the provider's strict schema rejects any default other than None.
+# ParsedTurn has no text for the customer on purpose: nothing written in this step reaches them.
+#
+# Unknown fields are rejected. The model writes this JSON without a provider schema, and it once
+# invented "store_info_type". Ignoring that would silently run the action with a missing filter.
 
 
-class ActionRequest(Record):
+class ModelOutput(Record):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class ActionRequest(ModelOutput):
     intent: IntentType
     product_query: str | None = None
     refers_to_previous_product: bool | None = None
     position_in_list: int | None = None
     category: str | None = None
+    min_price_brl: Decimal | None = None
     max_price_brl: Decimal | None = None
     in_stock: bool | None = None
     on_promotion: bool | None = None
@@ -232,7 +237,7 @@ class ActionRequest(Record):
     store_topic: StoreTopic | None = None
 
 
-class ParsedTurn(Record):
-    actions: list[ActionRequest]
-    needs_clarification: bool
+class ParsedTurn(ModelOutput):
+    actions: list[ActionRequest] = []
+    needs_clarification: bool = False
     off_topic_part: bool | None = None

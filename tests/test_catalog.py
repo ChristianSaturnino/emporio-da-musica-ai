@@ -9,6 +9,7 @@ from emporio_ai.domain.schemas import Availability, LookupStatus
 from emporio_ai.tools.catalog import (
     MAX_ALTERNATIVES,
     MAX_RESULTS,
+    correct_typos,
     find_category_mention,
     get_product_details,
     get_product_price,
@@ -335,9 +336,6 @@ def test_lookup_by_name_is_ambiguous_without_guessing(repo):
 
 
 def test_exact_name_resolves_a_name_contained_in_others(repo):
-    # "Martin D-28" matches both the D-28 and the D-28E; only the full name settles it.
-    result = get_product_details(repo, name="Martin D-28")
-    assert result.status is LookupStatus.AMBIGUOUS
     exact = get_product_details(repo, name="martin d-28 dreadnought natural")
     assert exact.status is LookupStatus.FOUND
     assert exact.details.offer.product_id == 93
@@ -403,3 +401,91 @@ def test_price_lookup_not_found(repo):
     result = get_product_price(repo, product_id=1)
     assert result.status is LookupStatus.NOT_FOUND
     assert result.offer is None
+
+
+def test_model_named_in_full_is_not_confused_with_a_longer_one(repo):
+    result = get_product_price(repo, name="Martin D-28")
+    assert result.status is LookupStatus.FOUND
+    assert result.offer.name == "Martin D-28 Dreadnought Natural"
+    longer = get_product_price(repo, name="Martin D-28E")
+    assert longer.offer.name == "Martin D-28E Elétrico Aço Natural"
+
+
+def test_brand_alone_is_still_ambiguous(repo):
+    assert get_product_price(repo, name="Martin").status is LookupStatus.AMBIGUOUS
+
+
+# Price ranges
+
+
+def test_minimum_price_reaches_products_beyond_the_cheapest_five(repo):
+    # Only the cheapest five used to come back, so nothing above a limit could ever be listed.
+    result = search_products(repo, category="violões", min_price=Decimal("5000"))
+    assert result.products
+    assert all(offer.quote.effective_price >= 5000 for offer in result.products)
+
+
+def test_price_range_uses_both_limits(repo):
+    result = search_products(
+        repo, category="teclado", min_price=Decimal("5000"), max_price=Decimal("10000")
+    )
+    assert [offer.quote.effective_price for offer in result.products] == [Decimal("9351.00")]
+
+
+def test_minimum_price_applies_to_the_promotional_price(repo):
+    # Listed at R$ 549,00, but on sale for R$ 439,20.
+    result = search_products(repo, term="Ohana CK-20", min_price=Decimal("500"))
+    assert not result.products
+
+
+# Typos
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("yamha c40", "yamaha c40"),
+        ("guitara fender", "guitarra fender"),
+        ("takamini gd20", "takamine gd20"),
+        ("ukelele", "ukulele"),
+    ],
+)
+def test_typos_are_corrected(repo, typed, expected):
+    assert correct_typos(repo, typed) == expected
+
+
+@pytest.mark.parametrize("text", ["trompete", "flauta", "gaita", "banjo", "cavaquinho", "c41"])
+def test_things_the_store_does_not_carry_are_not_turned_into_something_else(repo, text):
+    assert correct_typos(repo, text) == text
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        ({"term": "yamha c40"}, "Yamaha C40"),
+        ({"category": "guitara", "term": "fender"}, "Fender"),
+        ({"category": "ukelele"}, "Shelby SU-21S"),
+    ],
+)
+def test_search_recovers_from_typos(repo, kwargs, expected):
+    result = search_products(repo, **kwargs)
+    assert expected in result.products[0].name
+
+
+def test_price_lookup_recovers_from_a_typo(repo):
+    result = get_product_price(repo, name="takamini gd20")
+    assert result.status is LookupStatus.FOUND
+    assert "Takamine GD20" in result.offer.name
+
+
+def test_empty_result_from_a_filter_is_not_taken_for_a_typo(repo):
+    assert not search_products(repo, term="Yamaha C40", max_price=Decimal("1")).products
+
+
+def test_unknown_category_is_still_reported_after_trying_to_correct_it(repo):
+    assert search_products(repo, category="theremin").unknown_category
+
+
+@pytest.mark.parametrize("term", ["encordoamento", "metrônomo", "microfones"])
+def test_more_accessories_are_recognized(repo, term):
+    assert search_products(repo, term=term).unsold_item

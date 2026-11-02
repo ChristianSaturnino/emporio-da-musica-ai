@@ -6,17 +6,69 @@ Measured with `scripts/run_eval.py`, against the real OpenAI API, on 2026-11-01.
 cases were written by the author and the reply checks look for words. Real customers will say things
 that none of these sets contain.
 
-## The number to read
+## The numbers to read
 
-**32/34 on `cases_clean.json`**, using `gpt-6-luna` with reasoning effort `low`.
+Each of these sets was written before the code it measures, and this is its score on the first run.
+They are the most trustworthy numbers here, though one person wrote the cases and the code, so they
+are still not independent.
 
-That set was written before the last prompt was, none of its phrases are in the prompt, and it was
-scored once with no changes made in response to the score. It is the most trustworthy number here,
-though the same person wrote the cases and the prompt, so it is still not independent.
+| Set | What it covers | First run |
+| --- | --- | ---: |
+| `cases_clean.json` | Everyday questions, after removing test phrases from the prompt | 32/34 |
+| `cases_attack_final.json` | Prompt injection, plus legitimate messages as controls | 19/19 |
+| `cases_review_final.json` | Typos, price ranges, follow-ups, language, attempts to dictate prices | 36/36 |
+| `cases_review_last.json` | Wanting to buy, withdrawing, warranty, mixed requests | 20/20 |
+| `cases_closing.json` | Last unseen set, for the code about to be delivered | 18/20 |
 
-Of the two failures, one was a real bug and was fixed afterwards, without rescoring (see "Token
-caps"). The other, "vende encordoamento?", said the instrument was not found rather than that the
-store does not sell accessories, and was left as it is.
+The 2 failures in the closing set: "Martin D-28" was treated as ambiguous with the D-28E, a real bug
+fixed afterwards, and a comparison of two models answered correctly without restating their prices,
+which the check asked for.
+
+## Last complete run
+
+All sets, 436 cases, with the code just before the last two changes. **No reply was discarded by the
+reply check, none failed validation and none hit a provider error.** Most of the failures below are
+correct replies that a word check rejected, and each one was read.
+
+| Set | Score | Set | Score |
+| --- | ---: | --- | ---: |
+| `dev` | 58/58 | `review` | 57/60 |
+| `heldout` | 41/44 | `review_final` | 35/36 |
+| `final` | 25/26 | `review_last` | 20/20 |
+| `shopper` | 32/32 | `closing` | 20/20 |
+| `fresh` | 29/30 | `attack` | 24/24 |
+| `clean` | 34/34 | `attack_fresh` | 24/26 |
+| `calendar` | 7/7 | `attack_final` | 19/19 |
+
+**Not everything was re-run after that.** Fixed messages then stopped going through the model, and a
+line in the prompt made it omit prices from some lists, which `shopper` and `review` caught. After
+fixing that line, only the 22 most affected cases were run again, and all passed, as the budget for
+the round had run out. The 767 tests with a fake model cover the final code.
+
+## Response time
+
+Measured on the same 60 messages of `cases_review.json`. These are the same machine and connection,
+but the provider's speed also varies between runs.
+
+| | Median turn | Slowest 10% from | Interpreting (median) | Writing (median) |
+| --- | ---: | ---: | ---: | ---: |
+| Before | 3005 ms | 3756 ms | 1721 ms | 1268 ms |
+| After | 2386 ms | 2836 ms | 1073 ms | 1436 ms |
+
+Writing looks slower only because the quickest replies no longer use it. By kind of message:
+
+- **Greeting or thanks alone, or a message with no letters:** no model call at all.
+- **Price of a product that can be bought:** one call, about 1.1 s. The sentence comes from code.
+- **Everything else:** two calls, about 2.4 s.
+
+Where the time went: the provider's strict schema forces every field to be written even when empty,
+so one measured parse wrote 102 tokens to say what plain JSON says in 30 (1520 ms against 1106 ms, on
+the same 24 messages). Reasoning effort `none` saves about 300 ms more than `low` when interpreting.
+Scores were comparable: 33/34 for both on `clean`, and 97/102 against 99/102 on `dev` and `heldout`,
+with different cases failing in each. `minimal` is rejected by this model.
+
+Replies are not streamed, because the reply check needs the complete text before the customer sees
+any of it. That is the main thing left that would make it feel faster, and it would cost that check.
 
 ## Attacks
 
@@ -30,8 +82,7 @@ fixes that refuse legitimate customers.
 | `attack_fresh` | 26 | 22 | 22 | 24 |
 | `attack_final` | 19 | | | **19** |
 
-**The number to read is 19/19**, with 12 attacks and 7 controls, as `attack_final` was written before
-the last fix and scored once. The earlier sets were read and guided the fixes, so their higher scores
+The first run of `attack_final` has 12 attacks and 7 controls. The earlier sets were read and guided the fixes, so their higher scores
 say little. As with the clean set, one author wrote the attacks and the defenses, and a determined
 attacker would try things that none of these sets contain.
 
@@ -69,6 +120,7 @@ request the first step fails to mark.
 | Prompt cleaned of test phrases | `gpt-6-luna` | | | | | | **32/34** |
 | Token caps fixed | `gpt-6-luna` | 57/58 | 43/44 | 26/26 | 31/32 | 29/30 | |
 | Guardrails added | `gpt-6-luna` | 58/58 | 42/44 | 26/26 | 31/32 | 29/30 | 32/34 |
+| Faster, with the bugs from the review fixed | `gpt-6-luna` | 58/58 | 41/44 | 25/26 | 32/32 | 29/30 | 34/34 |
 
 Only the 42/44 and the first 32/34 were measured before their sets could influence the code or the
 prompt. The rest show that nothing important broke, and say little about new questions.
@@ -106,6 +158,25 @@ change the normal cost. It was only found by reading one failed case.
 ukuleles. Allowing a how-to-buy answer made "me vende cabo p10" explain how to buy, with no mention
 that accessories are not sold. Both were found by re-running earlier sets and reading the output. The
 second was fixed, and a later real run confirmed it, though that case still fails its intent check.
+
+**A detailed review found more than the scores did.** The review set scored 57/60 at first, but reading
+all 60 replies found problems in cases that passed:
+
+- "Cancela meu pedido 12" asked for the email and then answered with a status, never saying that
+  orders cannot be changed here. This has its own answer now.
+- "Yamha" and "guitara" were told the product does not exist. Typos are now corrected, but only after
+  a search finds nothing, and "trompete" is not turned into something else.
+- "Guitarra acima de 10 mil" only worked by luck, as the model filtered the five cheapest. Only a
+  maximum price existed, so "violão acima de 5 mil" could not have been answered.
+- "R$ 5 mil" was read by the reply check as R$ 5, which discarded correct replies.
+- An email sent by itself was refused as out of scope, and "e quando chega?" right after checking an
+  order asked for the email again.
+- "Prazo" counted as a strong word for delivery, which pushed the legal warranty out of the results
+  for "quanto tempo de garantia?".
+
+**Making it faster caused problems too, and the full run caught them.** Without the message, the model
+said it had received no question. A new prompt line made it omit prices from lists. Each one was
+found by running earlier sets and reading the output, which is why those sets are kept.
 
 ## Passing is not the same as correct
 

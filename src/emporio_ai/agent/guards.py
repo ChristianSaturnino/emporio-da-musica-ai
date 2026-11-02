@@ -11,7 +11,8 @@ from emporio_ai.agent.prompts import (
 from emporio_ai.domain.normalization import normalize_text, word_tokens
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-_AMOUNT = re.compile(r"R\$\s*(\d[\d.,]*\d|\d)")
+# "R$ 5 mil" is 5000. Read as 5, it got correct replies about a price limit discarded.
+_AMOUNT = re.compile(r"R\$\s*(\d[\d.,]*\d|\d)(\s*(?:mil\b|k\b))?", re.IGNORECASE)
 _TRACKING_CODE = re.compile(r"\bBR[A-Z0-9]{9}BR\b")
 _PERCENT = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 _STORED_PERCENT = re.compile(r'"promotion_percent":\s*(\d+)')
@@ -41,12 +42,19 @@ def mask_emails(text: str) -> tuple[str, str | None]:
 
 def _amounts(text: str) -> set[Decimal]:
     amounts = set()
-    for raw in _AMOUNT.findall(text):
+    for raw, thousands in _AMOUNT.findall(text):
         try:
-            amounts.add(Decimal(raw.replace(".", "").replace(",", ".")))
+            amount = Decimal(raw.replace(".", "").replace(",", "."))
         except InvalidOperation:
             continue
+        amounts.add(amount * 1000 if thousands else amount)
     return amounts
+
+
+def repeats_amounts(text: str, other: str) -> bool:
+    """Tell whether every amount in the text already appears in the other text."""
+    amounts = _amounts(text)
+    return bool(amounts) and amounts <= _amounts(other)
 
 
 def _percents(text: str) -> set[str]:

@@ -79,7 +79,6 @@ _SECTION_KEYWORDS = {
         "metropolitana",
         "grátis",
         "motoboy",
-        "prazo",
         "custa",
     ),
     "5.2": (
@@ -94,7 +93,6 @@ _SECTION_KEYWORDS = {
         "pac",
         "sedex",
         "jadlog",
-        "prazo",
         "custa",
         "avaria",
     ),
