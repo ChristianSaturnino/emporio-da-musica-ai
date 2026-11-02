@@ -23,12 +23,17 @@ class OutcomeResult(StrEnum):
 
 @dataclass(frozen=True)
 class ToolOutcome:
-    """What one action produced: facts for the model to write about, or a fixed message, or both."""
+    """What one action produced: facts for the model to write about, or a fixed message, or both.
+
+    already_told holds the facts behind a fixed message, so that the model writing another part of
+    the same reply knows them and does not contradict them.
+    """
 
     intent: IntentType
     result: OutcomeResult
     facts: dict[str, Any] | None = None
     message: str | None = None
+    already_told: dict[str, Any] | None = None
 
 
 class ConversationState(TypedDict, total=False):

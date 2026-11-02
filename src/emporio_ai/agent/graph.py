@@ -40,6 +40,7 @@ from emporio_ai.domain.schemas import (
 from emporio_ai.domain.scope import (
     find_unsold_item,
     is_shopping_without_a_product,
+    mentions_a_policy_subject,
     mentions_store_subject,
 )
 from emporio_ai.observability.events import elapsed_ms, log_event
@@ -50,6 +51,9 @@ from emporio_ai.tools.catalog import (
     get_product_details,
     get_product_price,
     is_generic,
+    names_another_model,
+    names_something_else,
+    only_points_at_something,
     products_named_in,
     search_products,
 )
@@ -154,10 +158,21 @@ def _names_nothing(action: ActionRequest) -> bool:
     )
 
 
+def _show_list(turn: _Turn, product_ids: list[int]) -> None:
+    """Record what was just shown. "Esse" only has a meaning when that is a single product.
+
+    A list replaces whatever was in focus before. After a price and then a list of guitars, "quanto
+    custa essa?" was answered with the earlier price.
+    """
+    turn.last_result_ids = product_ids
+    turn.last_product_id = product_ids[0] if len(product_ids) == 1 else None
+
+
 def _run_search(turn: _Turn, action: ActionRequest) -> ToolOutcome:
-    # "Quero a fender" can come back as a new search of the same list. "Tem outra Fender?" cannot.
+    # "Quero a fender" can come back as a new search of the same list, which has no name of its own.
+    # "Tem outra Fender?" cannot.
     wants_more = _WANTS_MORE.search(normalize_text(turn.user_message))
-    if _has_no_search_filter(action) and not wants_more:
+    if _has_no_search_filter(action) and not wants_more and not action.product_query:
         if products_named_in(turn.repo, turn.user_message, turn.last_result_ids):
             return _run_details(turn, ActionRequest(intent=IntentType.PRODUCT_DETAILS))
 
@@ -170,6 +185,7 @@ def _run_search(turn: _Turn, action: ActionRequest) -> ToolOutcome:
     # "O que vocês vendem?" deserves an answer from the catalog. Listing the cheapest products would
     # show only ukuleles, and asking it back sounded like the question had not been understood.
     if _names_nothing(action):
+        _show_list(turn, [])
         facts = {"catalog_overview": _to_facts(catalog_overview(turn.repo))}
         return ToolOutcome(action.intent, OutcomeResult.SUCCESS, facts=facts)
 
@@ -202,10 +218,7 @@ def _run_search(turn: _Turn, action: ActionRequest) -> ToolOutcome:
         return _run_search(turn, action.model_copy(update={"category": mention}))
     if not result.products:
         return _fixed(action.intent, OutcomeResult.NO_RESULT, prompts.NO_PRODUCTS_MESSAGE)
-    # "Esse" only has one meaning when a single product was shown. A list is kept for "o segundo".
-    turn.last_result_ids = [offer.product_id for offer in result.products]
-    if len(result.products) == 1:
-        turn.last_product_id = result.products[0].product_id
+    _show_list(turn, [offer.product_id for offer in result.products])
     facts = _to_facts(result)
     if action.only_cheapest or action.only_most_expensive:
         # The answer is settled. With the match count in view, the real model said it could not
@@ -219,7 +232,7 @@ def _run_search(turn: _Turn, action: ActionRequest) -> ToolOutcome:
 
 def _which_one(turn: _Turn, action: ActionRequest, options: list[tuple[int, str]]) -> ToolOutcome:
     # This is a list too: "e o segundo?" was answered with "de qual produto?".
-    turn.last_result_ids = [product_id for product_id, _ in options]
+    _show_list(turn, [product_id for product_id, _ in options])
     names = "\n".join(f"- {name}" for _, name in options)
     message = f"{prompts.AMBIGUOUS_PRODUCT_MESSAGE}\n{names}"
     return _fixed(action.intent, OutcomeResult.NEEDS_INPUT, message)
@@ -229,25 +242,50 @@ def _run_product_lookup(turn: _Turn, action: ActionRequest, lookup: Callable) ->
     if action.product_query and find_unsold_item(action.product_query):
         return _fixed(action.intent, OutcomeResult.BLOCKED, prompts.UNSOLD_ITEM_MESSAGE)
 
+    # A name that the list does not have is explicit, and beats any reference to the conversation.
+    query = action.product_query
+    if query and only_points_at_something(query):
+        query = None
+    outside_list = (
+        names_something_else(turn.repo, query, turn.last_result_ids)
+        if query
+        else names_another_model(turn.repo, turn.user_message, turn.last_result_ids)
+    )
     position = action.position_in_list
-    chosen_from_list = position is not None and 1 <= position <= len(turn.last_result_ids)
+    chosen_from_list = (
+        not outside_list and position is not None and 1 <= position <= len(turn.last_result_ids)
+    )
     named = []
-    if not chosen_from_list and not action.refers_to_previous_product:
+    if not outside_list and not chosen_from_list and not action.refers_to_previous_product:
         named = products_named_in(turn.repo, turn.user_message, turn.last_result_ids)
     if len(named) > 1:
         return _which_one(turn, action, [(p.product_id, p.name) for p in named])
+
+    focus = turn.last_product_id
+    if action.refers_to_previous_product:
+        # The model can point back and still name another product: "e o Giannini GF-3D?".
+        means_focus = not query or not names_something_else(turn.repo, query, [focus or 0])
+    else:
+        # With nothing named, the product in focus is the only one it can mean.
+        means_focus = not query
+    # The model can also leave the name out: "e o Martin D-45?".
+    if not query and focus is not None:
+        means_focus = not names_another_model(turn.repo, turn.user_message, [focus])
     if chosen_from_list:
         result = lookup(turn.repo, product_id=turn.last_result_ids[position - 1])
     elif named:
         chosen_from_list = True
         result = lookup(turn.repo, product_id=named[0].product_id)
-    # With nothing named, the product in focus is the only one it can mean, whatever the model set.
-    elif (
-        action.refers_to_previous_product or not action.product_query
-    ) and turn.last_product_id is not None:
-        result = lookup(turn.repo, product_id=turn.last_product_id)
-    elif action.product_query:
-        result = lookup(turn.repo, name=action.product_query)
+    elif means_focus and focus is not None:
+        result = lookup(turn.repo, product_id=focus)
+    elif query:
+        result = lookup(turn.repo, name=query)
+    elif len(turn.last_result_ids) > 1:
+        # Nothing says which, but the options were just shown, so the question can offer them.
+        products = (turn.repo.get_product(product_id) for product_id in turn.last_result_ids)
+        names = "\n".join(f"- {product.name}" for product in products if product)
+        message = f"{prompts.WHICH_OF_THE_LIST_MESSAGE}\n{names}"
+        return _fixed(action.intent, OutcomeResult.NEEDS_INPUT, message)
     else:
         return _fixed(action.intent, OutcomeResult.NEEDS_INPUT, prompts.WHICH_PRODUCT_MESSAGE)
 
@@ -294,7 +332,14 @@ def _run_price(turn: _Turn, action: ActionRequest) -> ToolOutcome:
     offer = (outcome.facts or {}).get("offer")
     if offer is None or offer["availability"] != Availability.AVAILABLE.value:
         return outcome
-    return _fixed(action.intent, OutcomeResult.SUCCESS, _price_sentence(offer, turn.user_message))
+    return ToolOutcome(
+        action.intent,
+        OutcomeResult.SUCCESS,
+        message=_price_sentence(offer, turn.user_message),
+        # Without this, a policy answer in the same reply said it knew of no promotion on a product
+        # the sentence had just said was on promotion.
+        already_told={"offer": offer},
+    )
 
 
 def _run_comparison(turn: _Turn, action: ActionRequest) -> ToolOutcome:
@@ -321,7 +366,7 @@ def _run_comparison(turn: _Turn, action: ActionRequest) -> ToolOutcome:
         message = prompts.COMPARISON_NEEDS_TWO_MESSAGE
         return _fixed(action.intent, OutcomeResult.NEEDS_INPUT, message)
     # "Quero a primeira" should refer to these from now on.
-    turn.last_result_ids = product_ids
+    _show_list(turn, product_ids)
     compared = []
     for product_id in product_ids:
         details = _to_facts(get_product_details(turn.repo, product_id=product_id).details)
@@ -331,6 +376,13 @@ def _run_comparison(turn: _Turn, action: ActionRequest) -> ToolOutcome:
 
 
 def _run_instrument_question(turn: _Turn, action: ActionRequest) -> ToolOutcome:
+    # The real model took "tem palheta?" for a question about the instrument and answered "tem sim".
+    if find_unsold_item(turn.user_message):
+        return _fixed(action.intent, OutcomeResult.BLOCKED, prompts.UNSOLD_ITEM_MESSAGE)
+    # It also took "boquilha tem troca?" for one, and left out that mouthpieces cannot be exchanged.
+    if mentions_a_policy_subject(turn.user_message):
+        return _run_policy(turn, action.model_copy(update={"intent": IntentType.POLICY_QUESTION}))
+
     # A model the store sells is answered from the catalog. "A Telecaster tem quantos captadores?"
     # came back as "a Telecaster tradicional", from general knowledge.
     catalog_ids = [product.product_id for product in turn.repo.find_products(limit=MAX_LIMIT)]
@@ -348,7 +400,7 @@ def _run_instrument_question(turn: _Turn, action: ActionRequest) -> ToolOutcome:
     if mention:
         examples = search_products(turn.repo, category=mention, limit=MAX_EXAMPLES).products
         if examples:
-            turn.last_result_ids = [offer.product_id for offer in examples]
+            _show_list(turn, [offer.product_id for offer in examples])
             facts["examples"] = _to_facts(examples)
     return ToolOutcome(action.intent, OutcomeResult.SUCCESS, facts=facts)
 
@@ -463,6 +515,16 @@ def _split_policy_topic(action: ActionRequest) -> list[ActionRequest]:
     ]
 
 
+def _split_buying(action: ActionRequest) -> list[ActionRequest]:
+    # "Quero o Yamaha F310, como faço?" came as a single action, and the reply left out the price.
+    if action.intent is not IntentType.HOW_TO_BUY or not action.product_query:
+        return [action]
+    return [
+        ActionRequest(intent=IntentType.PRODUCT_PRICE, product_query=action.product_query),
+        action.model_copy(update={"product_query": None}),
+    ]
+
+
 def _compares_nothing(action: ActionRequest) -> bool:
     return (
         action.intent is IntentType.PRODUCT_COMPARISON
@@ -487,6 +549,7 @@ def _clean_actions(actions: list[ActionRequest]) -> list[ActionRequest]:
     # the reply ask which products to compare instead of showing them.
     requests = [a for a in requests if not _compares_nothing(a)] or requests
     requests = [part for action in requests for part in _split_policy_topic(action)]
+    requests = [part for action in requests for part in _split_buying(action)]
     cleaned: list[ActionRequest] = []
     for action in requests:
         twin = next(
@@ -558,8 +621,27 @@ def _as_customer_text(text: str) -> str:
     return text.replace("<", "‹")
 
 
-def _facts_for_prompt(outcomes: list[ToolOutcome]) -> str:
+def _already_in_written_part(outcome: ToolOutcome, written: str | None) -> bool:
+    if written is None:
+        return False
+    if outcome.message == prompts.NO_POLICY_MESSAGE:
+        return True
+    if outcome.intent is not IntentType.PRODUCT_PRICE:
+        return False
+    # "O mais barato. E esse tem desconto?" lists the product and then asks for its price.
+    if not repeats_amounts(outcome.message or "", written):
+        return False
+    quote = (outcome.already_told or {}).get("offer", {}).get("quote", {})
+    percent = quote.get("promotion_percent")
+    return percent is None or f"{percent}%" in written.replace(" %", "%")
+
+
+def _facts_for_prompt(outcomes: list[ToolOutcome], already_told: list[ToolOutcome]) -> str:
     items = [{"intent": outcome.intent.value, "facts": outcome.facts} for outcome in outcomes]
+    items += [
+        {"intent": outcome.intent.value, "already_in_reply": outcome.already_told}
+        for outcome in already_told
+    ]
     # Retrieved text cannot close the tag around it, since "<" never appears literally.
     return json.dumps(items, ensure_ascii=False).replace("<", "\\u003c")
 
@@ -652,6 +734,7 @@ def build_graph(
             verified_order_id=state.get("verified_order_id"),
         )
         outcomes = []
+        asked_which = False
         for action in state["actions"]:
             handler = _HANDLERS[action.intent]
             started = time.perf_counter()
@@ -674,16 +757,18 @@ def build_graph(
                 error_type=error_type,
             )
             outcomes.append(outcome)
-        # Explaining how to buy right after declining an accessory contradicts the refusal, and
-        # after asking which product, it gets in the way of the question.
-        if any(
-            (outcome.message or "").startswith(
-                (prompts.UNSOLD_ITEM_MESSAGE, prompts.AMBIGUOUS_PRODUCT_MESSAGE)
+            # The rest depends on the answer. "Quero a Fender" came with several actions, and each
+            # one asked the same question again.
+            asked_which = (outcome.message or "").startswith(
+                (prompts.AMBIGUOUS_PRODUCT_MESSAGE, prompts.WHICH_OF_THE_LIST_MESSAGE)
             )
-            for outcome in outcomes
-        ):
+            if asked_which:
+                break
+        # Explaining how to buy right after declining an accessory contradicts the refusal.
+        if any(outcome.message == prompts.UNSOLD_ITEM_MESSAGE for outcome in outcomes):
             outcomes = [o for o in outcomes if o.message != prompts.HOW_TO_BUY_MESSAGE]
         return {
+            "dropped_actions": state.get("dropped_actions", False) and not asked_which,
             "outcomes": outcomes,
             "last_product_id": turn.last_product_id,
             "last_result_ids": turn.last_result_ids,
@@ -723,18 +808,13 @@ def build_graph(
         # Fixed messages are added here rather than handed to the model, which reworded them and
         # once dropped a promotion's percentage. With nothing else to write, no call is spent.
         to_write = [outcome for outcome in outcomes if outcome.facts is not None]
+        already_told = [outcome for outcome in outcomes if outcome.already_told is not None]
         written = None
         if to_write:
-            written, failure = _compose(state, to_write)
+            written, failure = _compose(state, to_write, already_told)
         parts = []
         for outcome in outcomes:
-            # "O mais barato. E esse tem desconto?" lists the product and then asks for its price.
-            already_written = written is not None and (
-                outcome.message == prompts.NO_POLICY_MESSAGE
-                or outcome.intent is IntentType.PRODUCT_PRICE
-                and repeats_amounts(outcome.message or "", written)
-            )
-            if outcome.message and not already_written:
+            if outcome.message and not _already_in_written_part(outcome, written):
                 parts.append(outcome.message)
             if to_write and outcome is to_write[0]:
                 parts.append(written)
@@ -747,9 +827,9 @@ def build_graph(
         return reply, failure
 
     def _compose(
-        state: ConversationState, outcomes: list[ToolOutcome]
+        state: ConversationState, outcomes: list[ToolOutcome], already_told: list[ToolOutcome]
     ) -> tuple[str, TurnFailure | None]:
-        facts = _facts_for_prompt(outcomes)
+        facts = _facts_for_prompt(outcomes, already_told)
         # Told not to, the real model still translated "bom dia" to Japanese along with an address.
         # What it does not read, it cannot do, so a message marked as off topic stays out of this.
         user_message = _as_customer_text(state["user_message"])

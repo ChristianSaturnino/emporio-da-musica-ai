@@ -14,6 +14,9 @@ from emporio_ai.tools.catalog import (
     find_category_mention,
     get_product_details,
     get_product_price,
+    names_another_model,
+    names_something_else,
+    only_points_at_something,
     products_named_in,
     search_products,
 )
@@ -468,6 +471,42 @@ def test_products_named_in_a_list(repo, text, expected):
     assert {product.name for product in found} == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "ids_of_list"),
+    [
+        ("Tem Giannini GF-3D?", "giannini"),
+        ("Tem Giannini GF-9X?", "giannini"),
+        ("A Fender Telecaster ou a Gibson SG-99?", "guitars"),
+    ],
+)
+def test_a_word_outside_the_list_means_it_is_not_a_choice_from_it(repo, text, ids_of_list):
+    # "Giannini GF" is shared with the GF-1R, and "3D" and "9X" are what tell them apart.
+    if ids_of_list == "giannini":
+        product_ids = [p.product_id for p in repo.find_products("Giannini GF-1R")]
+        product_ids += [p.product_id for p in repo.find_products("Tagima Memphis")]
+    else:
+        product_ids = guitar_ids(repo)
+    assert products_named_in(repo, text, product_ids) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Fender Telecaster Player Series", False),
+        ("fender", False),
+        ("Telecaster", False),
+        ("Giannini GF-3D", True),
+        ("Fender Jaguar", True),
+    ],
+)
+def test_names_something_else(repo, name, expected):
+    assert names_something_else(repo, name, guitar_ids(repo)) is expected
+
+
+def test_any_name_is_something_else_when_nothing_was_listed(repo):
+    assert names_something_else(repo, "Fender", [])
+
+
 def test_a_word_shared_by_the_whole_list_tells_nothing_apart(repo):
     ids = [p.product_id for p in repo.find_products("Fender", limit=5)]
     assert products_named_in(repo, "quero a fender", ids) == []
@@ -476,6 +515,145 @@ def test_a_word_shared_by_the_whole_list_tells_nothing_apart(repo):
 def test_numbers_alone_do_not_name_a_product(repo):
     ids = [p.product_id for p in repo.find_products(category_ids=[3], limit=5)]
     assert products_named_in(repo, "até 1 mil", ids) == []
+
+
+# The numbers of a model code
+
+
+def ids_of(repo, *names):
+    return [repo.find_products(name)[0].product_id for name in names]
+
+
+@pytest.mark.parametrize(
+    ("name", "focus", "expected"),
+    [
+        ("Martin D-45", "Martin D-28 Dreadnought", True),
+        ("Ohana CK-99", "Ohana CK-20", True),
+        ("Martin D-28", "Martin D-28E", True),
+        ("Martin D-28E", "Martin D-28 Dreadnought", True),
+        ("Martin D-28", "Martin D-28 Dreadnought", False),
+        ("Martin D 28", "Martin D-28 Dreadnought", False),
+        ("Ohana", "Ohana CK-20", False),
+    ],
+)
+def test_the_number_of_a_model_is_part_of_its_name(repo, name, focus, expected):
+    assert names_something_else(repo, name, ids_of(repo, focus)) is expected
+
+
+def test_all_the_words_of_a_name_must_fit_one_product(repo):
+    # Each word is somewhere in this list, but no product here is a Martin D-20.
+    product_ids = ids_of(repo, "Martin D-28 Dreadnought", "Ohana CK-20")
+    assert names_something_else(repo, "Martin D-20", product_ids)
+
+
+@pytest.mark.parametrize(
+    ("text", "names", "expected"),
+    [
+        ("Tem Ohana CK-99?", ("Ohana CK-20", "Ohana SK-10"), set()),
+        ("tem ohana ck 99?", ("Ohana CK-20", "Ohana SK-10"), set()),
+        ("Tem Martin D-45?", ("Martin D-28 Dreadnought", "Martin D-28E"), set()),
+        ("o Ohana CK-20", ("Ohana CK-20", "Ohana SK-10"), {"Ohana CK-20 Concert Natural"}),
+        ("Tem Ohana CK-20?", ("Ohana CK-20", "Ohana SK-10"), {"Ohana CK-20 Concert Natural"}),
+        ("o ohana ck 20", ("Ohana CK-20", "Ohana SK-10"), {"Ohana CK-20 Concert Natural"}),
+        ("o CK-20", ("Ohana CK-20", "Takamine GD20"), {"Ohana CK-20 Concert Natural"}),
+        ("o GD20", ("Ohana CK-20", "Takamine GD20"), {"Takamine GD20 Dreadnought Natural"}),
+        (
+            "o Martin D-28",
+            ("Martin D-28 Dreadnought", "Martin D-28E"),
+            {"Martin D-28 Dreadnought Natural"},
+        ),
+        (
+            "quero a martin",
+            ("Martin D-28 Dreadnought", "Martin D-28E", "Ohana CK-20"),
+            {"Martin D-28 Dreadnought Natural", "Martin D-28E Elétrico Aço Natural"},
+        ),
+        (
+            "a martin até 13000",
+            ("Martin D-28 Dreadnought", "Martin D-28E", "Ohana CK-20"),
+            {"Martin D-28 Dreadnought Natural", "Martin D-28E Elétrico Aço Natural"},
+        ),
+    ],
+)
+def test_products_named_in_keeps_the_numbers_of_a_model(repo, text, names, expected):
+    found = products_named_in(repo, text, ids_of(repo, *names))
+    assert {product.name for product in found} == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Martin D-45",
+        "Ohana CK-99",
+        "Ohana CK-2",
+        "Martin D-2",
+        "Yamaha C4",
+        "Giannini GF-1",
+        "Ohana 2",
+    ],
+)
+def test_a_code_only_matches_whole(repo, name):
+    # Matching is by part of a word, and "Ohana CK-2" was answered with the CK-20.
+    assert get_product_price(repo, name=name).status is LookupStatus.NOT_FOUND
+    assert search_products(repo, term=name).products == ()
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Martin D-28", "Martin D-28 Dreadnought Natural"),
+        ("martin d28", "Martin D-28 Dreadnought Natural"),
+        ("Martin D 28", "Martin D-28 Dreadnought Natural"),
+        ("Martin D-28E", "Martin D-28E Elétrico Aço Natural"),
+        ("Ohana 20", "Ohana CK-20 Concert Natural"),
+        ("gf3d", "Giannini GF-3D Dreadnought Sunburst"),
+        ("Takamine GD 20", "Takamine GD20 Dreadnought Natural"),
+        ("PRS SE Custom 24", "PRS SE Custom 24"),
+        ("Giannini GWNE-7", "Giannini GWNE-7 7 Cordas Nylon Natural"),
+        ("Gibson Les Paul 50s", "Gibson Les Paul Standard '50s"),
+    ],
+)
+def test_real_codes_are_still_found_however_they_are_written(repo, name, expected):
+    result = get_product_price(repo, name=name)
+    assert result.status is LookupStatus.FOUND
+    assert result.offer.name == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("o segundo", True),
+        ("o segundo?", True),
+        ("segunda", True),
+        ("esse", True),
+        ("esse mesmo", True),
+        ("2", True),
+        ("o 2", True),
+        ("opção 2", True),
+        ("D-45", False),
+        ("Martin", False),
+        ("Fender Telecaster", False),
+    ],
+)
+def test_what_only_points_at_something(text, expected):
+    assert only_points_at_something(text) is expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("E o Martin D-45?", True),
+        ("e o ck 99?", True),
+        ("E o Martin D-28?", False),
+        ("e o d 28?", False),
+        ("sai em 12x?", False),
+        ("dá para pagar 2000 no PIX?", False),
+        ("até 6000", False),
+        ("quero 2", False),
+        ("tem 6 cordas?", False),
+    ],
+)
+def test_names_another_model_only_for_codes(repo, text, expected):
+    assert names_another_model(repo, text, ids_of(repo, "Martin D-28 Dreadnought")) is expected
 
 
 # Price ranges

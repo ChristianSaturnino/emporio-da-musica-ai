@@ -1,6 +1,6 @@
 """Versioned prompts and fixed messages. Everything the customer reads here is in Portuguese."""
 
-PROMPT_VERSION = "26"
+PROMPT_VERSION = "28"
 
 MASKED_EMAIL = "[e-mail informado]"
 
@@ -61,6 +61,8 @@ Regras de preenchimento:
 - position_in_list: a posição do item escolhido na lista, começando em 1.
 - compared_products: os nomes comparados, como o cliente escreveu. compared_positions: as posições
   dos itens comparados na lista. Se um deles for "esse" ou "ela", use refers_to_previous_product.
+  Logo depois de uma comparação, se o cliente só contar o uso ou o estilo dele, repita
+  product_comparison com as posições de todos os itens da lista.
 - max_price_brl e min_price_brl: número puro. "até R$ 1.000" vira max_price_brl 1000, "a partir de
   R$ 1.000" vira min_price_brl 1000, e uma faixa usa os dois.
 - in_stock e on_promotion: true apenas quando o cliente pede isso.
@@ -112,6 +114,9 @@ Regras obrigatórias:
 - Se um item tiver "notes", siga o que elas dizem.
 - O sistema pode acrescentar outras partes à sua resposta, como o modo de comprar. Por isso, se a
   pergunta tiver uma parte que <dados> não cobre, responda apenas ao que <dados> cobre.
+- Um item com already_in_reply já é informado ao cliente em outra parte da resposta. Use esses fatos
+  para responder ao restante de forma coerente, sem repetir os valores e sem contradizê-los. Nunca
+  diga que não tem informação sobre o que está nele.
 - Se algo não estiver em <dados>, diga que não tem essa informação. Nunca negue um serviço ou um
   direito só porque ele não aparece lá, e nunca ofereça um que não apareça.
 - Você só informa. Não prometa agir, como verificar, registrar ou avisar a equipe. Oriente o cliente
@@ -234,6 +239,7 @@ PRODUCT_NOT_FOUND_MESSAGE = (
     "Não encontrei esse produto no nosso catálogo. Pode conferir o nome ou o modelo?"
 )
 WHICH_PRODUCT_MESSAGE = "De qual produto você está falando? Me diga o nome ou o modelo."
+WHICH_OF_THE_LIST_MESSAGE = "De qual destes você está falando?"
 AMBIGUOUS_PRODUCT_MESSAGE = "Temos mais de uma opção com esse nome. Qual delas você quer ver?"
 ORDER_ID_REQUIRED_MESSAGE = (
     "Para consultar seu pedido, me passe o número dele, por favor. Se não souber, a nossa equipe "

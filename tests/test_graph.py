@@ -637,6 +637,32 @@ def test_name_shared_by_two_items_of_the_list_asks_which(make_service, understoo
     assert "Gibson" not in reply
 
 
+def test_which_one_is_asked_only_once_when_the_model_returns_several_actions(make_service):
+    # The real model returned several actions, and the customer got the question twice, plus a note
+    # that only the first two things had been answered.
+    llm = guitars_then(
+        turn(
+            details(product_query="fender"),
+            price(product_query="fender"),
+            details(product_query="Fender Stratocaster"),
+            act(IntentType.HOW_TO_BUY),
+        )
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "me mostra as guitarras")
+    reply = service.chat(SESSION, "quero a fender")
+    assert reply.count(prompts.AMBIGUOUS_PRODUCT_MESSAGE) == 1
+    assert prompts.DROPPED_ACTIONS_MESSAGE not in reply
+    assert prompts.HOW_TO_BUY_MESSAGE not in reply
+
+
+def test_action_before_the_which_one_question_is_kept(make_service):
+    llm = FakeLLM(turn(store(StoreTopic.HOURS), details(product_query="Takamine")))
+    reply = make_service(llm).chat(SESSION, "que horas abre? E o Takamine?")
+    assert reply.startswith("Resposta redigida.")
+    assert prompts.AMBIGUOUS_PRODUCT_MESSAGE in reply
+
+
 def test_way_to_buy_waits_until_the_customer_has_chosen(make_service):
     llm = guitars_then(turn(details(product_query="fender"), act(IntentType.HOW_TO_BUY)))
     service = make_service(llm)
@@ -899,6 +925,39 @@ def test_question_about_instruments_can_show_examples_from_the_catalog(make_serv
     assert "Shelby SU-21S" in llm.facts
 
 
+@pytest.mark.parametrize("message", ["tem palheta?", "vocês têm cabo?", "o que é um pedal?"])
+def test_accessory_read_as_a_question_about_instruments_is_declined(make_service, message):
+    # The real model answered "tem palheta?" with "tem sim".
+    llm = FakeLLM(turn(act(IntentType.INSTRUMENT_QUESTION)))
+    assert make_service(llm).chat(SESSION, message) == prompts.UNSOLD_ITEM_MESSAGE
+    assert llm.compose_calls == []
+
+
+def test_policy_read_as_a_question_about_instruments_uses_the_manual(make_service):
+    # The real model answered "boquilha tem troca?" saying it had no information.
+    llm = FakeLLM(turn(act(IntentType.INSTRUMENT_QUESTION)))
+    make_service(llm).chat(SESSION, "boquilha tem troca?")
+    data = llm.facts.split("</dados>")[0]
+    assert "boquilhas" in data.lower()
+    assert "instrument_question" not in data
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "qual a diferença entre ukulele soprano e tenor?",
+        "violão de nylon ou de aço, o que muda no som?",
+        "qual instrumento é mais fácil pra quem nunca tocou?",
+        "o que é um humbucker?",
+    ],
+)
+def test_general_questions_are_not_taken_for_policies(make_service, message):
+    llm = FakeLLM(turn(act(IntentType.INSTRUMENT_QUESTION)))
+    make_service(llm).chat(SESSION, message)
+    assert '"instrument_question": true' in llm.facts
+    assert "section_id" not in llm.facts
+
+
 def test_question_naming_a_model_is_answered_from_the_catalog(make_service):
     llm = FakeLLM(turn(act(IntentType.INSTRUMENT_QUESTION)))
     make_service(llm).chat(SESSION, "a Telecaster tem quantos captadores?")
@@ -912,7 +971,7 @@ def test_question_naming_a_model_is_answered_from_the_catalog(make_service):
 def test_question_about_a_kind_of_instrument_is_not_taken_for_a_model(make_service, message):
     llm = FakeLLM(turn(act(IntentType.INSTRUMENT_QUESTION)))
     make_service(llm).chat(SESSION, message)
-    assert "instrument_question" in llm.facts
+    assert '"instrument_question": true' in llm.facts
 
 
 def test_question_about_instruments_survives_an_off_topic_part(make_service):
@@ -1146,6 +1205,14 @@ def test_price_already_in_the_written_part_is_not_repeated(make_service):
     assert reply == written
 
 
+def test_way_to_buy_naming_a_product_also_gives_its_price(make_service):
+    # "Quero o Yamaha F310, como faço?" came as one action, and the reply left out the price.
+    llm = FakeLLM(turn(act(IntentType.HOW_TO_BUY, product_query="Yamaha F310")))
+    reply = make_service(llm).chat(SESSION, "quero o Yamaha F310, como faço?")
+    assert "R$ 699,90" in reply
+    assert prompts.HOW_TO_BUY_MESSAGE in reply
+
+
 def test_fixed_part_is_kept_when_the_written_part_fails(make_service):
     llm = FakeLLM(
         turn(price(product_query="Yamaha C40"), policy("pagamento boleto")), reply="Custa R$ 1,00."
@@ -1162,7 +1229,386 @@ def test_fixed_price_stays_exact_when_another_action_needs_writing(make_service)
     assert reply.startswith("Ohana CK-20 Concert Natural está com 20% de desconto")
     assert reply.endswith("Resposta redigida.")
     assert "boleto" in llm.facts
-    assert "R$ 439,20" not in llm.facts
+
+
+def test_writer_knows_what_the_fixed_price_already_told_the_customer(make_service):
+    # The reply confirmed 20% off and then said it had no information about a promotion.
+    llm = FakeLLM(turn(price(product_query="Ohana CK-20"), policy("promoção PIX")))
+    make_service(llm).chat(SESSION, "O Ohana CK-20 tem promoção? Dá para somar com o PIX?")
+    told = re.search(r"<dados>(.*)</dados>", llm.facts, re.DOTALL).group(1)
+    items = json.loads(told)
+    assert items[-1]["already_in_reply"]["offer"]["quote"]["promotion_percent"] == 20
+    assert items[-1]["already_in_reply"]["offer"]["quote"]["promotional_price"] == "R$ 439,20"
+    assert "already_in_reply" in prompts.COMPOSE_SYSTEM_PROMPT
+
+
+def test_combined_reply_keeps_the_exact_price_and_the_written_part(make_service):
+    written = "Promoções não somam com o PIX."
+    llm = FakeLLM(turn(price(product_query="Ohana CK-20"), policy("promoção PIX")), reply=written)
+    reply = make_service(llm).chat(SESSION, "O Ohana CK-20 tem promoção? Dá para somar com o PIX?")
+    assert reply == (
+        "Ohana CK-20 Concert Natural está com 20% de desconto: de R$ 549,00 por R$ 439,20. "
+        f"O desconto do PIX não se soma à promoção.\n\n{written}"
+    )
+
+
+def test_writer_can_repeat_the_price_it_was_told(make_service):
+    written = "Sai por R$ 439,20, com 20% de desconto, e o PIX não soma."
+    llm = FakeLLM(turn(price(product_query="Ohana CK-20"), policy("promoção PIX")), reply=written)
+    reply = make_service(llm).chat(SESSION, "Ohana CK-20 e PIX?")
+    assert written in reply
+
+
+def test_fixed_promotion_is_kept_if_the_written_part_lost_its_percentage(make_service):
+    written = "Sai de R$ 549,00 por R$ 439,20."
+    llm = FakeLLM(turn(price(product_query="Ohana CK-20"), policy("promoção PIX")), reply=written)
+    reply = make_service(llm).chat(SESSION, "Ohana CK-20 e PIX?")
+    assert "20% de desconto" in reply
+
+
+def test_simple_price_question_still_takes_no_writing(make_service):
+    llm = FakeLLM(turn(price(product_query="Ohana CK-20")))
+    make_service(llm).chat(SESSION, "Quanto custa o Ohana CK-20?")
+    assert llm.compose_calls == []
+
+
+def test_writer_gets_the_price_facts_only_as_context_when_there_is_nothing_else(make_service):
+    llm = FakeLLM(turn(price(product_query="Ohana CK-20"), act(IntentType.HOW_TO_BUY)))
+    make_service(llm).chat(SESSION, "quero o Ohana CK-20")
+    assert llm.compose_calls == []
+
+
+# An explicit name against the conversation's context
+
+
+def violoes_then(*turns):
+    return FakeLLM(turn(search(category="violões", max_price_brl=Decimal("1000"))), *turns)
+
+
+def test_explicit_model_is_not_replaced_by_one_of_the_list(make_service):
+    # The Giannini GF-1R was in the list, and "Tem Giannini GF-3D?" was answered about it.
+    llm = violoes_then(turn(details(product_query="Giannini GF-3D")))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    assert "Giannini GF-1R" in llm.facts
+    service.chat(SESSION, "Tem Giannini GF-3D?")
+    data = llm.facts.split("</dados>")[0]
+    assert "Giannini GF-3D Dreadnought Sunburst" in data
+    assert '"availability": "out_of_stock"' in data
+    assert '"stock_quantity": 0' in data
+    assert "alternatives" in data
+    assert "chosen_from_list" not in data
+
+
+def test_explicit_model_comes_back_as_a_search_too(make_service):
+    llm = violoes_then(turn(search(product_query="Giannini GF-3D")))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    service.chat(SESSION, "Tem Giannini GF-3D?")
+    data = llm.facts.split("</dados>")[0]
+    assert "Giannini GF-3D" in data
+    assert "Giannini GF-1R" not in data
+
+
+@pytest.mark.parametrize(
+    ("message", "query"),
+    [
+        ("Tem Giannini GF-9X?", "Giannini GF-9X"),
+        ("Tem Giannini GF-9X?", None),
+        ("Tem Tagima Zeta?", "Tagima Zeta"),
+    ],
+)
+def test_model_that_does_not_exist_does_not_become_one_of_the_list(make_service, message, query):
+    llm = violoes_then(turn(details(product_query=query)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    calls = len(llm.compose_calls)
+    reply = service.chat(SESSION, message)
+    assert len(llm.compose_calls) == calls
+    # With no name from the model, it can only ask which of the list was meant.
+    assert reply == prompts.PRODUCT_NOT_FOUND_MESSAGE or reply.startswith(
+        prompts.WHICH_OF_THE_LIST_MESSAGE
+    )
+
+
+@pytest.mark.parametrize(
+    "extra", [{"position_in_list": 2}, {"refers_to_previous_product": True}], ids=str
+)
+def test_explicit_name_beats_the_reference_the_model_also_set(make_service, extra):
+    llm = violoes_then(turn(details(product_query="Giannini GF-3D", **extra)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    service.chat(SESSION, "E o Giannini GF-3D?")
+    data = llm.facts.split("</dados>")[0]
+    assert "Giannini GF-3D" in data
+    assert "Rozini" not in data
+
+
+def test_position_in_the_list_still_works(make_service):
+    llm = violoes_then(turn(details(position_in_list=2)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    service.chat(SESSION, "o segundo")
+    assert "Rozini RC-104" in llm.facts.split("</dados>")[0]
+
+
+# The numbers of a model code tell products apart
+
+
+def focus_then(first_name, *turns):
+    return FakeLLM(turn(price(product_query=first_name)), *turns)
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "wrong"),
+    [("Martin D-28", "Martin D-45", "Martin D-28"), ("Ohana CK-20", "Ohana CK-99", "Ohana CK-20")],
+)
+@pytest.mark.parametrize(
+    "extra", [{"refers_to_previous_product": True}, {}], ids=["points", "plain"]
+)
+def test_model_that_does_not_exist_is_not_the_one_in_focus(
+    make_service, first, second, wrong, extra
+):
+    # "E o Martin D-45?" got the price of the D-28, as only the number told them apart.
+    llm = focus_then(first, turn(price(product_query=second, **extra)))
+    service = make_service(llm)
+    service.chat(SESSION, f"Quanto custa o {first}?")
+    reply = service.chat(SESSION, f"E o {second}?")
+    assert reply == prompts.PRODUCT_NOT_FOUND_MESSAGE
+    assert wrong not in reply
+
+
+def test_explicit_model_that_exists_replaces_the_one_in_focus(make_service):
+    llm = focus_then(
+        "Martin D-28E", turn(price(product_query="Martin D-28", refers_to_previous_product=True))
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Martin D-28E?")
+    reply = service.chat(SESSION, "E o Martin D-28?")
+    assert reply.startswith("Martin D-28 Dreadnought Natural")
+
+
+def test_model_left_out_by_the_model_still_does_not_become_the_one_in_focus(make_service):
+    llm = focus_then("Martin D-28", turn(price(refers_to_previous_product=True)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Martin D-28?")
+    assert service.chat(SESSION, "E o Martin D-45?") == prompts.WHICH_PRODUCT_MESSAGE
+
+
+@pytest.mark.parametrize("query", ["Martin D-45", "Giannini GF-9X", "Rozini RC-999"])
+def test_explicit_model_beats_a_conflicting_position(make_service, query):
+    llm = violoes_then(turn(price(product_query=query, position_in_list=2)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    assert service.chat(SESSION, f"o segundo, {query}") == prompts.PRODUCT_NOT_FOUND_MESSAGE
+
+
+def test_item_of_the_list_can_be_named_by_its_code_with_the_model_leaving_it_out(make_service):
+    llm = violoes_then(turn(details()))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    service.chat(SESSION, "Tem Rozini RC-104?")
+    data = llm.facts.split("</dados>")[0]
+    assert "Rozini RC-104" in data
+    assert "Tagima" not in data
+
+
+def test_model_left_out_by_the_model_beats_a_conflicting_position(make_service):
+    llm = violoes_then(turn(price(position_in_list=2)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    reply = service.chat(SESSION, "o segundo, Rozini RC-999")
+    assert reply.startswith(prompts.WHICH_OF_THE_LIST_MESSAGE)
+
+
+@pytest.mark.parametrize("query", [None, "o segundo", "segunda", "2", "o 2", "opção 2"])
+def test_position_works_whatever_the_model_wrote_as_its_name(make_service, query):
+    llm = violoes_then(turn(price(product_query=query, position_in_list=2)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    assert service.chat(SESSION, "o segundo").startswith("Rozini RC-104")
+
+
+def test_position_works_when_the_message_has_a_free_number(make_service):
+    llm = violoes_then(turn(price(position_in_list=2)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais violões até R$ 1000?")
+    assert service.chat(SESSION, "o segundo sai em 10x?").startswith("Rozini RC-104")
+
+
+@pytest.mark.parametrize("query", [None, "esse", "essa", "esse mesmo", "aquele"])
+def test_reference_works_whatever_the_model_wrote_as_its_name(make_service, query):
+    llm = focus_then(
+        "Martin D-28", turn(price(product_query=query, refers_to_previous_product=True))
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Martin D-28?")
+    assert service.chat(SESSION, "e esse?").startswith("Martin D-28 Dreadnought Natural")
+
+
+@pytest.mark.parametrize("message", ["sai em 12x?", "dá para pagar 2000 no PIX?", "tem 6 cordas?"])
+def test_a_free_number_does_not_lose_the_product_in_focus(make_service, message):
+    llm = focus_then("Martin D-28", turn(price(refers_to_previous_product=True)))
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Martin D-28?")
+    assert service.chat(SESSION, message).startswith("Martin D-28 Dreadnought Natural")
+
+
+@pytest.mark.parametrize("query", ["Martin D-28", "Martin D-28 Dreadnought Natural", "martin"])
+def test_the_same_product_can_still_be_named_while_in_focus(make_service, query):
+    llm = focus_then(
+        "Martin D-28", turn(price(product_query=query, refers_to_previous_product=True))
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Martin D-28?")
+    reply = service.chat(SESSION, "e o martin?")
+    assert reply.startswith("Martin D-28 Dreadnought Natural")
+
+
+def test_fender_of_a_list_still_asks_which(make_service):
+    llm = FakeLLM(turn(search(category="guitarras")), turn(details(product_query="fender")))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais guitarras vocês têm?")
+    reply = service.chat(SESSION, "quero a fender")
+    assert "Telecaster" in reply
+    assert "Stratocaster" in reply
+
+
+def test_choosing_from_a_list_by_code_tells_apart_models_with_close_numbers(make_service):
+    llm = FakeLLM(turn(search(product_query="Martin")), turn(details()))
+    service = make_service(llm)
+    service.chat(SESSION, "Quais Martin vocês têm?")
+    service.chat(SESSION, "quero o D-28")
+    data = llm.facts.split("</dados>")[0]
+    assert "Martin D-28 Dreadnought Natural" in data
+    assert "Martin D-28E" not in data
+
+
+# What "esse" means as the conversation moves on
+
+
+def test_new_list_does_not_inherit_the_old_product(make_service):
+    # "Quanto custa essa?" after a list of guitars was answered with the price of the Takamine.
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        turn(search(category="guitarras")),
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "Quais guitarras vocês têm?")
+    reply = service.chat(SESSION, "Quanto custa essa?")
+    assert reply.startswith(prompts.WHICH_OF_THE_LIST_MESSAGE)
+    assert "Fender Telecaster Player Series" in reply
+    assert "Takamine" not in reply
+
+
+def test_clarification_is_asked_only_once_with_several_actions(make_service):
+    action = price(refers_to_previous_product=True)
+    llm = FakeLLM(
+        turn(search(category="guitarras")), turn(action, details(refers_to_previous_product=True))
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quais guitarras vocês têm?")
+    reply = service.chat(SESSION, "Quanto custa essa?")
+    assert reply.count(prompts.WHICH_OF_THE_LIST_MESSAGE) == 1
+
+
+def test_model_is_not_told_about_the_old_product_after_a_new_list(make_service):
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        turn(search(category="guitarras")),
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "Quais guitarras vocês têm?")
+    service.chat(SESSION, "Quanto custa essa?")
+    context = llm.parse_calls[-1][1]["content"]
+    assert "Produto em foco" not in context
+    assert "Última lista" in context
+
+
+def test_choosing_from_the_list_sets_the_new_focus(make_service):
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        turn(search(category="guitarras")),
+        turn(details(position_in_list=2)),
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "Quais guitarras vocês têm?")
+    service.chat(SESSION, "quero a segunda")
+    assert "PRS SE Custom 24" in service.chat(SESSION, "Quanto custa essa?")
+
+
+def test_list_with_a_single_product_sets_the_focus(make_service):
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        turn(search(category="ukulele", only_cheapest=True)),
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "o ukulele mais barato")
+    assert "Shelby SU-21S" in service.chat(SESSION, "Quanto custa esse?")
+
+
+@pytest.mark.parametrize(
+    "unrelated",
+    [turn(store(StoreTopic.HOURS)), turn(policy("garantia")), turn(act(IntentType.GREETING))],
+    ids=["store", "policy", "greeting"],
+)
+def test_focus_survives_a_question_that_shows_no_products(make_service, unrelated):
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        unrelated,
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "Mensagem sobre outra coisa")
+    assert "Takamine GD20" in service.chat(SESSION, "E esse?")
+
+
+def test_search_with_no_result_keeps_the_focus(make_service):
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        turn(search(product_query="Theremin")),
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "Tem theremin?")
+    assert "Takamine GD20" in service.chat(SESSION, "E esse?")
+
+
+def test_comparison_leaves_no_single_product_in_focus(make_service):
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        turn(act(IntentType.PRODUCT_COMPARISON, compared_products=["Telecaster", "Stratocaster"])),
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "compara")
+    reply = service.chat(SESSION, "Quanto custa essa?")
+    assert reply.startswith(prompts.WHICH_OF_THE_LIST_MESSAGE)
+    assert "Telecaster" in reply
+    assert "Takamine" not in reply
+
+
+def test_catalog_overview_clears_the_focus(make_service):
+    llm = FakeLLM(
+        turn(price(product_query="Takamine GD20")),
+        turn(search()),
+        turn(price(refers_to_previous_product=True)),
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Quanto custa o Takamine GD20?")
+    service.chat(SESSION, "o que vocês vendem?")
+    assert service.chat(SESSION, "Quanto custa esse?") == prompts.WHICH_PRODUCT_MESSAGE
 
 
 @pytest.mark.parametrize(
@@ -1212,7 +1658,7 @@ def test_position_outside_the_list_asks_which_product(make_service, position):
     llm = FakeLLM(turn(search(category="violões")), turn(details(position_in_list=position)))
     service = make_service(llm)
     service.chat(SESSION, "violões?")
-    assert service.chat(SESSION, "esse") == prompts.WHICH_PRODUCT_MESSAGE
+    assert service.chat(SESSION, "esse").startswith(prompts.WHICH_OF_THE_LIST_MESSAGE)
 
 
 def test_position_without_a_list_asks_which_product(make_service):
@@ -1244,10 +1690,14 @@ def test_several_results_leave_no_product_in_focus(make_service):
     )
     service = make_service(llm)
     service.chat(SESSION, "Quais violões vocês têm?")
-    assert service.chat(SESSION, "E esse tem desconto?") == prompts.WHICH_PRODUCT_MESSAGE
+    reply = service.chat(SESSION, "E esse tem desconto?")
+    assert reply.startswith(prompts.WHICH_OF_THE_LIST_MESSAGE)
+    assert "Tagima Memphis AC-39" in reply
+    assert "R$" not in reply
 
 
-def test_ambiguous_lookup_keeps_the_previous_product(make_service):
+def test_ambiguous_lookup_leaves_no_product_in_focus(make_service):
+    # After "qual delas?", the earlier product is no longer what "esse" means.
     llm = FakeLLM(
         turn(price(product_query="Ohana CK-20")),
         turn(price(product_query="Takamine")),
@@ -1256,7 +1706,9 @@ def test_ambiguous_lookup_keeps_the_previous_product(make_service):
     service = make_service(llm)
     service.chat(SESSION, "Preço do Ohana CK-20?")
     service.chat(SESSION, "E o Takamine?")
-    assert "Ohana CK-20" in service.chat(SESSION, "E esse?")
+    reply = service.chat(SESSION, "E esse?")
+    assert reply.startswith(prompts.WHICH_OF_THE_LIST_MESSAGE)
+    assert "Ohana" not in reply
 
 
 def test_question_naming_nothing_uses_the_product_in_focus(make_service):
@@ -1572,6 +2024,22 @@ def test_guard_checks_what_else_can_be_invented(reply, kind):
 )
 def test_guard_accepts_the_same_claims_when_the_store_said_them(reply, evidence):
     assert find_unsupported_claims(reply, evidence) == []
+
+
+def test_known_limit_prices_swapped_between_products_are_not_detected():
+    # This records a limitation, not a protection. Both values are in the evidence, so the check
+    # accepts a sentence that is wrong. Only prices written by code are safe from this.
+    evidence = (
+        '{"name": "Telecaster", "price": "R$ 5.400,00"} '
+        '{"name": "Stratocaster", "price": "R$ 12.500,00"}'
+    )
+    swapped = "A Telecaster custa R$ 12.500,00 e a Stratocaster custa R$ 5.400,00."
+    assert find_unsupported_claims(swapped, evidence) == []
+
+
+def test_known_limit_a_false_sentence_with_real_values_is_not_detected():
+    evidence = '{"pix_price": "R$ 569,91"} prazo de 7 dias'
+    assert find_unsupported_claims("Você tem 7 dias e o direito está garantido.", evidence) == []
 
 
 def test_guard_catches_the_prompt_being_repeated():

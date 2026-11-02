@@ -68,6 +68,10 @@ def find_unsupported_claims(reply: str, evidence: str) -> list[str]:
     contacts, addresses, free offers and the prompts themselves. Evidence has to come from the
     store, as a customer who writes "R$ 1,00" must not be able to vouch for it. It returns kinds
     rather than values, so the result is safe to log.
+
+    Finding a value in the evidence does not prove the sentence is true. A price attached to the
+    wrong product passes when both products are in the evidence. Prices are safe from this only
+    where code writes the sentence, as with the price of a single product.
     """
     unsupported = []
     if _amounts(reply) - _amounts(evidence):

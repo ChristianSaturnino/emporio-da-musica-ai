@@ -1,11 +1,18 @@
 """Catalog tools: product search, details and prices, with no LLM involved."""
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from difflib import get_close_matches
 
 from emporio_ai.data.repository import MAX_LIMIT, Repository
-from emporio_ai.domain.normalization import normalize_text, search_tokens, tokenize, word_tokens
+from emporio_ai.domain.normalization import (
+    build_search_text,
+    normalize_text,
+    search_tokens,
+    tokenize,
+    word_tokens,
+)
 from emporio_ai.domain.pricing import availability_of, quote_price
 from emporio_ai.domain.schemas import (
     Availability,
@@ -30,6 +37,14 @@ _TYPO_CUTOFF = 0.8
 
 _GENERIC_PRODUCT_WORDS = frozenset(word_tokens("instrumentos musicais produtos itens opções"))
 _NON_DISTINCTIVE_CATEGORY_WORDS = frozenset(word_tokens("instrumentos de e madeiras metais cordas"))
+_REFERENCE_WORDS = frozenset(
+    word_tokens(
+        "esse essa este esta isso aquele aquela ele ela mesmo mesma "
+        "primeiro primeira segundo segunda terceiro terceira quarto quarta quinto quinta "
+        "ultimo ultima numero opção item"
+    )
+)
+_MODEL_CODE = re.compile(r"\b([a-z]+)([- ]?)(\d+[a-z]*)\b")
 
 # The descriptions of these products name a different brand from the product itself, so they are
 # not passed on: a "Yamaha" drum kit would be presented as a "Pearl Export".
@@ -113,17 +128,104 @@ def products_named_in(repo: Repository, text: str, product_ids: list[int]) -> li
 
     "Quero a fender" points to both Fenders of a list, and the model tended to pick one. Words
     shared by the whole list, like "natural" in a list of natural guitars, tell nothing apart.
+
+    A word that names something outside the list means the customer is not choosing from it.
+    "Tem Giannini GF-3D?" shares "Giannini GF" with the GF-1R, and was answered about the GF-1R.
     """
     products = [product for i in product_ids if (product := repo.get_product(i)) is not None]
     names = {product.product_id: set(tokenize(product.name)) for product in products}
     if len(names) < 2:
         return []
+    codes = _model_codes(repo, text)
+    if _has_unknown_code(codes, products):
+        return []
     known = set().union(*names.values())
-    shared = set.intersection(*names.values())
-    words = {word for word in search_tokens(text) if not word.isdigit()} & known - shared
+    numbers = {number for _, number in codes}
+    # A free number, as in "até 1 mil", chooses nothing. "D-28" is not the "D-28E" of the same list.
+    mentioned = {word for word in _name_words(text) if not word.isdigit() or word in numbers}
+    outside = mentioned - known
+    if outside & _catalog_words(repo) or any(_looks_like_a_code(word) for word in outside):
+        return []
+    words = mentioned & known - set.intersection(*names.values())
     if not words:
         return []
     return [product for product in products if words <= names[product.product_id]]
+
+
+def names_something_else(repo: Repository, name: str, product_ids: list[int]) -> bool:
+    """Tell whether a product name is not the name of any one of these products.
+
+    If so, it cannot be a reference to them. The model can expand "fender" to the full name of a
+    listed product, which stays inside the list, while "Giannini GF-3D" does not. Numbers count, or
+    "Martin D-45" would be taken for the "Martin D-28" in focus. All the words must fit one product,
+    or the "Martin D-20" would pass in a list with a "Martin D-28" and an "Ohana CK-20".
+    """
+    products = [product for i in product_ids if (product := repo.get_product(i)) is not None]
+    words = set(_name_words(name))
+    return not any(words <= set(tokenize(product.name)) for product in products)
+
+
+def names_another_model(repo: Repository, text: str, product_ids: list[int]) -> bool:
+    """Tell whether the customer's words hold a model code that none of these products have."""
+    products = [product for i in product_ids if (product := repo.get_product(i)) is not None]
+    return _has_unknown_code(_model_codes(repo, text), products)
+
+
+def only_points_at_something(name: str) -> bool:
+    """Tell whether a product name is just a reference, like "o segundo", "esse" or "2".
+
+    The model sometimes writes these in the name, and they would then be searched for as a name.
+    """
+    return all(word in _REFERENCE_WORDS or word.isdigit() for word in _name_words(name))
+
+
+def _name_words(text: str) -> list[str]:
+    # Without this, the "104?" of "Tem Rozini RC-104?" was not the "104" of the product's name.
+    return search_tokens(" ".join(word_tokens(text)))
+
+
+def _catalog_words(repo: Repository) -> set[str]:
+    return {
+        word for product in repo.find_products(limit=MAX_LIMIT) for word in tokenize(product.name)
+    }
+
+
+def _looks_like_a_code(word: str) -> bool:
+    return any(character.isdigit() for character in word) and not word.isdigit()
+
+
+def _model_codes(repo: Repository, text: str) -> list[tuple[str, str]]:
+    """Return the letters and number of each model code in the text, like "ck" and "99".
+
+    A number standing apart only counts after a word from a product name, so "CK 99" and "Custom 24"
+    are codes, while "até 6000" and "quero 2" are not.
+    """
+    catalog_words = _catalog_words(repo)
+    codes = []
+    for letters, gap, number in _MODEL_CODE.findall(normalize_text(text)):
+        words = search_tokens(letters)
+        if words and (gap != " " or words[0] in catalog_words):
+            codes.append((words[0], number))
+    return codes
+
+
+def _has_code(code: tuple[str, str], product: Product) -> bool:
+    letters, number = code
+    words = {*build_search_text(product.name).split(), *word_tokens(product.name)}
+    return letters + number in words or {letters, number} <= words
+
+
+def _has_unknown_code(codes: list[tuple[str, str]], products: list[Product]) -> bool:
+    return any(not any(_has_code(code, product) for product in products) for code in codes)
+
+
+def _with_codes_of(repo: Repository, text: str, products: list[Product]) -> list[Product]:
+    """Keep the products that have every model code of the text.
+
+    Matching is by part of a word, so "Ohana CK-2" found the CK-20 and was answered as if it was it.
+    """
+    codes = _model_codes(repo, text)
+    return [p for p in products if all(_has_code(code, p) for code in codes)]
 
 
 def correct_typos(repo: Repository, text: str | None) -> str | None:
@@ -233,6 +335,8 @@ def _search(
     matches = repo.find_products(term, category_ids, limit=MAX_LIMIT)
     if term and not matches:
         matches = repo.find_products(term, category_ids, limit=MAX_LIMIT, include_description=True)
+    if term:
+        matches = _with_codes_of(repo, term, matches)
 
     offers = [_to_offer(repo, product) for product in matches]
     available = [offer for offer in offers if offer.availability is Availability.AVAILABLE]
@@ -276,7 +380,8 @@ def _lookup_product(repo: Repository, product_id: int | None, name: str | None) 
     matches = repo.find_products(name, limit=MAX_LIMIT) or repo.find_products(
         correct_typos(repo, name), limit=MAX_LIMIT
     )
-    exact = [p for p in matches if normalize_text(p.name) == normalize_text(name)]
+    matches = _with_codes_of(repo, name, matches)
+    exact =[p for p in matches if normalize_text(p.name) == normalize_text(name)]
     # "Martin D-28" matches "Martin D-28E" as text, but it only names the D-28.
     words = set(search_tokens(name))
     whole_words = [p for p in matches if words <= set(tokenize(p.name))]

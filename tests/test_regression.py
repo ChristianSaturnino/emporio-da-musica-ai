@@ -134,7 +134,9 @@ def test_follow_up_asks_when_the_context_is_not_unequivocal(make_service):
     )
     service = make_service(llm)
     service.chat(SESSION, "Me mostra os violões.")
-    assert service.chat(SESSION, "E esse tem desconto?") == prompts.WHICH_PRODUCT_MESSAGE
+    assert service.chat(SESSION, "E esse tem desconto?").startswith(
+        prompts.WHICH_OF_THE_LIST_MESSAGE
+    )
 
 
 def test_two_intentions_with_their_own_sources(make_service):

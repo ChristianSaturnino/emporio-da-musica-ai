@@ -67,6 +67,14 @@ _STORE_WORD_ROOTS = frozenset(
 _SHOPPING_WORD_ROOTS = frozenset({"apren", "compr", "escol", "indic", "instr", "prese", "produ"})
 
 
+# Words that only make sense for the store's policies, not for how an instrument works.
+_POLICY_WORD_ROOTS = frozenset({"bolet", "devol", "frete", "garan", "parce", "reemb", "troca"})
+
+
+def mentions_a_policy_subject(text: str) -> bool:
+    return any(word[:5] in _POLICY_WORD_ROOTS for word in word_tokens(text))
+
+
 def is_shopping_without_a_product(text: str) -> bool:
     return any(
         word[:5] in _SHOPPING_WORD_ROOTS and not word.startswith("instruc")
