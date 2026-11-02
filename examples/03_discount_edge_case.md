@@ -2,7 +2,7 @@
 
 List and PIX prices, a follow-up that refers to the previous product, a product whose only promotion is inactive, and an active promotion that does not stack with PIX.
 
-> Real conversation with the agent, using `gpt-6-luna`, recorded on 2026-11-01 by `scripts/record_examples.py`. Replies are not edited. The customer's email is replaced by a label. All data is fictional.
+> Real conversation with the agent, using `gpt-6-luna`, recorded on 2026-11-02 by `scripts/record_examples.py`. Replies are not edited. The customer's email is replaced by a label. All data is fictional.
 
 **Cliente:** Quanto custa o Takamine GD20?
 
@@ -14,6 +14,4 @@ List and PIX prices, a follow-up that refers to the previous product, a product 
 
 **Cliente:** E o Ohana CK-20 tem promoção? Dá para somar com o desconto do PIX?
 
-**Assistente:** Ohana CK-20 Concert Natural está com 20% de desconto: de R$ 549,00 por R$ 439,20. O desconto do PIX não se soma à promoção.
-
-Não tenho a informação sobre uma promoção ativa para o Ohana CK-20. Promoções não acumulam com o desconto do PIX: os 5% no PIX não se aplicam sobre preços promocionais.
+**Assistente:** Sim. O Ohana CK-20 Concert Natural está com 20% de desconto: de R$ 549,00 por R$ 439,20. O desconto de PIX não se soma à promoção.

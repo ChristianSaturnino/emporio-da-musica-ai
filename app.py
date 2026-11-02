@@ -11,6 +11,7 @@ from emporio_ai.observability.events import configure_logging
 EXAMPLE_QUESTIONS = (
     "Quais violões têm até R$ 1.000 e estão disponíveis?",
     "Quanto custa o Takamine GD20? E esse tem desconto?",
+    "Qual a diferença entre a Telecaster e a Stratocaster?",
     "Abre domingo? Qual o endereço?",
     "Me arrependi da compra, posso devolver?",
     "Onde está meu pedido 8?",

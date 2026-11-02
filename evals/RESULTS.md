@@ -1,16 +1,69 @@
 # Evaluation results
 
-Measured with `scripts/run_eval.py`, against the real OpenAI API, on 2026-11-01.
+## Status of these numbers
+
+All scores come from `scripts/run_eval.py` against the real OpenAI API. There are three levels, and they
+should not be mixed:
+
+- **Latest complete run:** prompt version 27, after the fixes from the final technical review. This is
+  the section below.
+- **After that run:** four small fixes, prompt version 28. They have tests with a fake model, and the
+  examples were recorded on this version, but the complete run was not repeated.
+- **After the second technical review:** model numbers such as "D-45" now tell products apart, `fx-03`
+  is stricter, and a technical failure fails any case. These have fake-model tests only. They have not
+  run on the real model, and the examples were not recorded again.
+- **Everything else in this report is historical,** from earlier versions on 2026-11-01. Those runs only
+  scored the last message of each conversation, and their cost limit was checked only between
+  conversations.
+
+Costs here are estimates from list prices, not amounts billed.
+
+## Latest complete run
+
+Prompt version 27, 479 conversations, on 2026-11-02. It completed without reaching the cost limit, at an
+estimated US$ 0.16. **465 passed and 14 failed. No reply was discarded by the reply check, none failed
+validation and none hit a provider error.** `fixes` is the only set with checks on messages other than
+the last, and only on some of them. Its 8/8 was measured with the earlier `fx-03`, which only checked
+that the last reply did not repeat the old price.
+
+| Set | Score | Set | Score |
+| --- | ---: | --- | ---: |
+| `dev` | 55/58 | `review` | 60/60 |
+| `heldout` | 40/44 | `review_final` | 36/36 |
+| `final` | 25/26 | `review_last` | 18/20 |
+| `shopper` | 32/32 | `closing` | 20/20 |
+| `fresh` | 29/30 | `service` | 33/35 |
+| `clean` | 34/34 | `attack` | 24/24 |
+| `calendar` | 7/7 | `attack_fresh` | 25/26 |
+| `fixes` | 8/8 | `attack_final` | 19/19 |
+
+Every failure was read:
+
+| Kind | Cases | What happened | Status |
+| --- | ---: | --- | --- |
+| Real | 3 | "Tem palheta?" got "tem sim", "boquilha tem troca?" got no answer, and "quero o Yamaha F310, como faço?" left out the price | Fixed in code, with fake-model tests only |
+| Real | 1 | After a comparison, "quero tocar música clássica" asked which product | Reduced: the question now lists the options, and a prompt rule was added |
+| Real | 1 | "Me ajuda a escolher uma guitarra" asked about budget and did not show the guitars | Still possible |
+| Script | 2 | After a rewrite, the script kept the wrong text for its section check. The replies were correct | Fixed |
+| Check too strict | 5 | The replies were acceptable, but missed a word, or used an extra action or another intent | Left as they are |
+| Trade-off | 2 | "Me conta uma piada de músico" and "me indica um advogado" do not get the plain refusal | Known and accepted |
+
+The eight `fixes` conversations were read one by one. The failures from the technical review did not
+appear: the GF-3D is reported as unavailable with an alternative, a model that does not exist is reported
+as not found, and the Ohana CK-20 promotion is no longer denied. Example 3 and this set confirm that
+last point on two recordings, which shows it can work, not that it always will.
+
+## How to read them
 
 **This is a regression check, not a benchmark, and its limits have already mattered twice.** The
-cases were written by the author and the reply checks look for words. Real customers will say things
-that none of these sets contain.
+cases came from the same process as the code, and the reply checks look for words. Real customers
+will say things that none of these sets contain.
 
-## The numbers to read
+## First runs
 
-Each of these sets was written before the code it measures, and this is its score on the first run.
-They are the most trustworthy numbers here, though one person wrote the cases and the code, so they
-are still not independent.
+Each of these sets was written before the code it measured, and this is its score on its first run, so
+they are historical. They were the least influenced by tuning, though the cases and the code came from
+the same process, so they are still not independent.
 
 | Set | What it covers | First run |
 | --- | --- | ---: |
@@ -20,48 +73,18 @@ are still not independent.
 | `cases_review_last.json` | Wanting to buy, withdrawing, warranty, mixed requests | 20/20 |
 | `cases_closing.json` | Everyday and edge cases, before comparing products existed | 18/20 |
 | `cases_service.json` | Comparing products, questions about items, overview, choosing by name | 32/32 |
+| `cases_fixes.json` | The failures found by the technical review, with checks on some middle messages | 8/8 |
 
 The 2 failures in the closing set: "Martin D-28" was treated as ambiguous with the D-28E, a real bug
 fixed afterwards, and a comparison of two models answered correctly without restating their prices,
 which the check asked for.
 
-## Last complete run
-
-All sets, 468 cases, a few small fixes before the final code. **No reply was discarded by the
-reply check, none failed validation and none hit a provider error.** Each failure below was read.
-
-| Set | Score | Set | Score |
-| --- | ---: | --- | ---: |
-| `dev` | 57/58 | `review` | 60/60 |
-| `heldout` | 44/44 | `review_final` | 36/36 |
-| `final` | 26/26 | `review_last` | 20/20 |
-| `shopper` | 32/32 | `closing` | 19/20 |
-| `fresh` | 29/30 | `service` | 31/32 |
-| `clean` | 34/34 | `attack` | 24/24 |
-| `calendar` | 7/7 | `attack_fresh` | 25/26 |
-| | | `attack_final` | 18/19 |
-
-Of those failures, 2 were real and were then fixed: "quero a fender" could pick one Fender, and "não
-tenho essa informação" could come out twice. 2 are correct replies that a word check or intent check
-rejected. "Me conta uma piada de músico" gets a question instead of a refusal, a known trade-off.
-"Prazo de troca?", with an off-topic part, explained only the defect rule and left out the 7 days for
-preference, which is still possible.
-
-After those fixes, `service`, `closing`, `attack_final` and `shopper` were run again, and 40 of the 60
-of `review`, stopped by a cost limit. The only failures were 2 correct replies rejected by word
-checks. One of them showed general knowledge used for a named model, so that was fixed as well, and
-`service` then scored 32/32.
-
-The last changes let the writing step see its own previous reply and handle questions about the
-conversation. They were checked on `service` and `attack_final` only, which found a comparison of
-nothing that got in the way of a search, since fixed. "Prazo de troca?" failed again as described
-above. The complete run has not been repeated on the final code. The tests with a fake model cover
-it.
-
 ## Response time
 
-Measured on the same 60 messages of `cases_review.json`. These are the same machine and connection,
-but the provider's speed also varies between runs.
+Measured on the same 60 messages of `cases_review.json`, on an earlier version. These are the same
+machine and connection, but the provider's speed also varies between runs. The latest complete run, with
+all sets and a different mix of messages, was slower: a median of 3.1 s per turn, with the slowest 10%
+from 6.1 s. A later prompt and a slower provider may both explain it, and this was not isolated.
 
 | | Median turn | Slowest 10% from | Interpreting (median) | Writing (median) |
 | --- | ---: | ---: | ---: | ---: |
@@ -95,9 +118,9 @@ fixes that refuse legitimate customers.
 | `attack_fresh` | 26 | 22 | 22 | 24 |
 | `attack_final` | 19 | | | **19** |
 
-The first run of `attack_final` has 12 attacks and 7 controls. The earlier sets were read and guided the fixes, so their higher scores
-say little. As with the clean set, one author wrote the attacks and the defenses, and a determined
-attacker would try things that none of these sets contain.
+The first run of `attack_final` has 12 attacks and 7 controls. The earlier sets were read and guided
+the fixes, so their higher scores say little. As with the clean set, the attacks and the defenses came from the same process, and a
+determined attacker would try things that none of these sets contain.
 
 The score alone hid the most useful finding. Before these fixes, no attack in the sets obtained a
 customer's data, a false price or an invented code, and the score mostly counted word checks. What
@@ -135,6 +158,7 @@ request the first step fails to mark.
 | Guardrails added | `gpt-6-luna` | 58/58 | 42/44 | 26/26 | 31/32 | 29/30 | 32/34 |
 | Faster, with the bugs from the review fixed | `gpt-6-luna` | 58/58 | 41/44 | 25/26 | 32/32 | 29/30 | 34/34 |
 | Comparing products, answering about items | `gpt-6-luna` | 57/58 | 44/44 | 26/26 | 32/32 | 29/30 | 34/34 |
+| After the technical review | `gpt-6-luna` | 55/58 | 40/44 | 25/26 | 32/32 | 29/30 | 34/34 |
 
 Only the 42/44 and the first 32/34 were measured before their sets could influence the code or the
 prompt. The rest show that nothing important broke, and say little about new questions.
@@ -192,6 +216,15 @@ all 60 replies found problems in cases that passed:
 said it had received no question. A new prompt line made it omit prices from lists. Each one was
 found by running earlier sets and reading the output, which is why those sets are kept.
 
+**A separate technical review found what these sets could not.** All of the following passed the scores
+above, and were reproduced with a scripted model before being fixed:
+
+- After a list, "Tem Giannini GF-3D?" was answered about the GF-1R, as they share "Giannini GF". This
+  is visible in example 1, and a model that does not exist was replaced in the same way.
+- "Quanto custa essa?" after a list of guitars gave the price of a product from before the list.
+- A reply confirmed a promotion and then said it had no information about it, as the step writing the
+  second part did not know what code had written in the first. This is visible in example 3.
+
 ## Passing is not the same as correct
 
 Reading the replies found problems in cases that passed. Those marked as still open remain possible,
@@ -207,8 +240,8 @@ since nothing in the code prevents them:
 - **Still open:** "Pode sim! Amanhã, segunda-feira, 02/11, a loja atende das 9h às 18h", with a general
   warning about holidays. That day is a national holiday, and the assistant has no holiday calendar.
 - "O violão de nylon usa cordas mais macias ao toque". This is general knowledge from outside the
-  store's data. It is now allowed on purpose for general questions about instruments (decision 035),
-  and the reply check cannot verify it.
+  store's data. It is now allowed on purpose for general questions about instruments (see
+  [decision 7](../docs/decisions.md)), and the reply check cannot verify it.
 
 Some scored failures are false alarms: a correct reply can fail on a word check or on a harmless
 extra action. One is a deliberate trade-off: when in doubt the assistant asks instead of refusing, so
@@ -228,8 +261,10 @@ extra action. One is a deliberate trade-off: when in doubt the assistant asks in
 
 - **Results vary between runs.** `gpt-6-luna` only accepts the default temperature, so the same
   message can be understood differently. Identical runs scored 43 and 44 on held-out.
-- **Small samples, one author.** With 34 cases, one case moves the score by about 3 points.
+- **Small samples, not independent.** With 34 cases, one case moves the score by about 3 points.
 - **Conversations are short.** Most cases have one to three messages.
 - **No purchase flow.** The assistant informs and hands over to the store's team to close a sale.
-- **Generic advice.** It lists options and asks about budget, without judging which is best.
+- **Limited by the catalog.** Recommendations rest on each product's description and specs, which are
+  sparse or identical for some products.
 - **Hand-written word lists.** Accessory names and policy keywords are incomplete by nature.
+- **Word checks only.** A pass means the expected words appeared, not that the reply is right.

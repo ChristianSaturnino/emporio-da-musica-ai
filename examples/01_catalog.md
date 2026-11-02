@@ -2,7 +2,7 @@
 
 An overview worked out from the catalog, a search with stock and price filters, a product that is active but out of stock, and an accessory, which the store does not sell.
 
-> Real conversation with the agent, using `gpt-6-luna`, recorded on 2026-11-01 by `scripts/record_examples.py`. Replies are not edited. The customer's email is replaced by a label. All data is fictional.
+> Real conversation with the agent, using `gpt-6-luna`, recorded on 2026-11-02 by `scripts/record_examples.py`. Replies are not edited. The customer's email is replaced by a label. All data is fictional.
 
 **Cliente:** Quais produtos vocês têm aí?
 
@@ -12,17 +12,19 @@ An overview worked out from the catalog, a search with stock and price filters, 
 
 **Assistente:** Temos estas opções de violões disponíveis por até R$ 1.000:
 
-- Tagima Memphis AC-39 Nylon Natural — R$ 429,90; no PIX, R$ 408,41.
-- Rozini RC-104 Nylon Estudante — R$ 459,90; no PIX, R$ 436,91.
-- Shelby SN-100 Folk Aço Preto — R$ 549,00; no PIX, R$ 521,55.
-- Giannini GF-1R Aço Folk Sunburst — R$ 579,90; no PIX, R$ 550,91.
-- Yamaha C40 Nylon Natural — R$ 599,90; no PIX, R$ 569,91.
+- Tagima Memphis AC-39 Nylon Natural — R$ 429,90 (R$ 408,41 no PIX)
+- Rozini RC-104 Nylon Estudante — R$ 459,90 (R$ 436,91 no PIX)
+- Shelby SN-100 Folk Aço Preto — R$ 549,00 (R$ 521,55 no PIX)
+- Giannini GF-1R Aço Folk Sunburst — R$ 579,90 (R$ 550,91 no PIX)
+- Yamaha C40 Nylon Natural — R$ 599,90 (R$ 569,91 no PIX)
 
 Há mais opções nessa faixa. Você prefere violão de nylon ou de aço?
 
 **Cliente:** Tem Giannini GF-3D?
 
-**Assistente:** Não tenho informações do Giannini GF-3D. Posso te passar os detalhes do Giannini GF-1R Aço Folk Sunburst, que tem tampo em Spruce, cordas de aço e acabamento Sunburst. Custa R$ 579,90 ou R$ 550,91 no PIX.
+**Assistente:** O Giannini GF-3D Dreadnought Sunburst está indisponível no momento. Ele tem cordas de aço e corpo dreadnought, com volume alto e graves profundos, indicado para country e pop.
+
+Como alternativa, o Shelby SGD-195E Elétrico Aço Sunburst está disponível por R$ 799,00 (R$ 759,05 no PIX).
 
 **Cliente:** Vocês vendem pedal de guitarra?
 
