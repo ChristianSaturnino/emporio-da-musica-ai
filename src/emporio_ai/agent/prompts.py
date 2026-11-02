@@ -1,6 +1,6 @@
 """Versioned prompts and fixed messages. Everything the customer reads here is in Portuguese."""
 
-PROMPT_VERSION = "28"
+PROMPT_VERSION = "29"
 
 MASKED_EMAIL = "[e-mail informado]"
 
@@ -24,7 +24,8 @@ Intenções:
   de entrega. Desistir de um produto já recebido é policy_question.
 - policy_question: pagamento, parcelamento, PIX, frete, entrega para qualquer cidade, prazos, troca,
   devolução, garantia, promoções em geral ou privacidade. Querer trocar ou devolver algo conta,
-  mesmo sem dizer qual produto, e perguntar se a loja oferece um serviço também.
+  mesmo sem dizer qual produto, e perguntar se a loja oferece um serviço também. Contar que um
+  instrumento quebrou ou deixou de funcionar também conta.
 - store_information: endereço ou visita à loja (address), horário (hours), contato (contact) ou
   sobre a loja, como história e dados da empresa (about).
 - how_to_buy: como adquirir um produto, fechar negócio, reservar um instrumento, fazer um pedido
@@ -115,8 +116,8 @@ Regras obrigatórias:
 - O sistema pode acrescentar outras partes à sua resposta, como o modo de comprar. Por isso, se a
   pergunta tiver uma parte que <dados> não cobre, responda apenas ao que <dados> cobre.
 - Um item com already_in_reply já é informado ao cliente em outra parte da resposta. Use esses fatos
-  para responder ao restante de forma coerente, sem repetir os valores e sem contradizê-los. Nunca
-  diga que não tem informação sobre o que está nele.
+  para responder ao restante de forma coerente, sem repetir o que está nele, nem perguntas, e sem
+  contradizê-lo. Nunca diga que não tem informação sobre o que está nele.
 - Se algo não estiver em <dados>, diga que não tem essa informação. Nunca negue um serviço ou um
   direito só porque ele não aparece lá, e nunca ofereça um que não apareça.
 - Você só informa. Não prometa agir, como verificar, registrar ou avisar a equipe. Oriente o cliente
@@ -267,12 +268,17 @@ PROVIDER_ERROR_MESSAGE = (
     "Estou com uma instabilidade para responder agora. Pode tentar de novo em instantes? Se for "
     "urgente, nossa equipe atende em contato@emporiodamusica.com.br."
 )
+# For whoever is running the demo, not for a customer. A real deployment would alert the team.
+SETUP_ERROR_MESSAGE = (
+    "O modelo configurado recusou o pedido. Confira OPENAI_API_KEY, OPENAI_MODEL e o crédito da "
+    "conta OpenAI no arquivo .env, e reinicie o aplicativo."
+)
 UNVERIFIED_REPLY_MESSAGE = (
     "Não consegui confirmar todas as informações dessa resposta e prefiro não arriscar. Pode "
     "perguntar de outro jeito, ou falar com a nossa equipe em contato@emporiodamusica.com.br?"
 )
 DROPPED_ACTIONS_MESSAGE = (
-    "Respondi as duas primeiras coisas que você pediu. Me manda o restante que eu continuo!"
+    "Respondi as três primeiras coisas que você pediu. Me manda o restante que eu continuo!"
 )
 EMPTY_MESSAGE = "Oi! Me conta como posso ajudar."
 TOO_LONG_MESSAGE = "Sua mensagem ficou muito longa para mim. Pode resumir o que você precisa?"

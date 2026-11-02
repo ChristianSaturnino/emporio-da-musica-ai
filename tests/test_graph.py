@@ -90,7 +90,7 @@ def test_price_of_something_that_cannot_be_bought_is_left_to_the_model(make_serv
     llm = FakeLLM(turn(price(product_query=name)))
     assert make_service(llm).chat(SESSION, f"Quanto custa o {name}?") == "Resposta redigida."
     assert name in llm.facts
-    assert "pix_price" not in llm.facts
+    assert "pix_price" not in llm.facts.split('"alternatives"')[0]
 
 
 def test_out_of_stock_product_is_marked_and_has_alternatives(make_service):
@@ -654,6 +654,131 @@ def test_which_one_is_asked_only_once_when_the_model_returns_several_actions(mak
     assert reply.count(prompts.AMBIGUOUS_PRODUCT_MESSAGE) == 1
     assert prompts.DROPPED_ACTIONS_MESSAGE not in reply
     assert prompts.HOW_TO_BUY_MESSAGE not in reply
+
+
+@pytest.mark.parametrize(
+    "other",
+    [policy("boleto"), store(StoreTopic.HOURS), order(order_id=8)],
+    ids=["policy", "store", "order"],
+)
+def test_question_about_something_else_survives_the_which_one_question(make_service, other):
+    # "Quanto custa a Fender e aceita boleto?" asked which Fender, and boleto was silently lost.
+    llm = FakeLLM(turn(price(product_query="Fender"), other))
+    reply = make_service(llm).chat(SESSION, "Quanto custa a Fender? E a outra pergunta?")
+    assert prompts.AMBIGUOUS_PRODUCT_MESSAGE in reply
+    assert "Fender Telecaster Player Series" in reply
+    if other.intent is IntentType.ORDER_STATUS:
+        assert prompts.EMAIL_REQUIRED_MESSAGE in reply
+    else:
+        assert "Resposta redigida." in reply
+
+
+def test_question_lost_after_the_which_one_question_is_reported(make_service):
+    llm = FakeLLM(
+        turn(
+            price(product_query="Fender"),
+            policy("boleto"),
+            store(StoreTopic.HOURS),
+            policy("frete"),
+        )
+    )
+    reply = make_service(llm).chat(SESSION, "Fender, boleto, horário e frete?")
+    assert prompts.DROPPED_ACTIONS_MESSAGE in reply
+
+
+def test_fixed_message_reaches_the_writer_of_the_rest_of_the_reply(make_service):
+    # Next to a request for the email, the real model wrote that it had no information on the order.
+    llm = FakeLLM(turn(order(order_id=8), store(StoreTopic.HOURS)))
+    make_service(llm).chat(SESSION, "Cadê meu pedido 8? E abrem domingo?")
+    assert "already_in_reply" in llm.facts
+    assert prompts.EMAIL_REQUIRED_MESSAGE in llm.facts
+
+
+def test_three_questions_are_answered_without_a_note(make_service):
+    # "Qual o endereço, o telefone e o horário?" came back as "não tenho a informação do horário".
+    llm = FakeLLM(
+        turn(price(product_query="Yamaha F310"), policy("boleto"), store(StoreTopic.HOURS))
+    )
+    reply = make_service(llm).chat(SESSION, "F310, boleto e horário?")
+    assert "R$ 699,90" in reply
+    assert '"section_id": "3"' in llm.facts
+    assert '"section_id": "2"' in llm.facts
+    assert prompts.DROPPED_ACTIONS_MESSAGE not in reply
+
+
+def test_a_fourth_question_is_reported_instead_of_silently_lost(make_service):
+    llm = FakeLLM(
+        turn(
+            price(product_query="Yamaha F310"),
+            policy("boleto"),
+            store(StoreTopic.HOURS),
+            policy("frete"),
+        )
+    )
+    reply = make_service(llm).chat(SESSION, "F310, boleto, horário e frete?")
+    assert prompts.DROPPED_ACTIONS_MESSAGE in reply
+
+
+def test_each_policy_question_finds_its_own_section(make_service):
+    # The words of the other questions filled the results, and the warranty section was left out.
+    message = "Tem garantia? Entregam em Dourados? E parcelam em 12x?"
+    llm = FakeLLM(turn(policy("garantia"), policy("entrega outra cidade"), policy("parcelamento")))
+    make_service(llm).chat(SESSION, message)
+    for section in ("8.1", "5.2", "3.1"):
+        assert f'"section_id": "{section}"' in llm.facts
+
+
+def test_a_lone_policy_question_still_uses_the_customer_words(make_service):
+    llm = FakeLLM(turn(policy("troca")))
+    make_service(llm).chat(SESSION, "boquilha tem troca?")
+    assert '"section_id": "4.4"' in llm.facts
+
+
+@pytest.mark.parametrize(
+    ("understood", "expected", "other"),
+    [
+        (price(only_cheapest=True), "R$ 5.400,00", "Gibson"),
+        (price(only_cheapest=True, refers_to_previous_product=True), "R$ 5.400,00", "Gibson"),
+        (details(only_cheapest=True), "Telecaster", "Gibson"),
+        (price(only_most_expensive=True), "R$ 18.900,00", "Telecaster"),
+        (details(only_most_expensive=True), "Gibson", "Telecaster"),
+    ],
+)
+def test_cheapest_or_dearest_of_the_list_is_resolved(make_service, understood, expected, other):
+    # "Dessas, qual a mais barata?" was answered with "de qual destes você está falando?".
+    llm = guitars_then(turn(understood))
+    service = make_service(llm)
+    service.chat(SESSION, "me mostra as guitarras")
+    llm.compose_calls.clear()
+    reply = service.chat(SESSION, "dessas, e a do extremo?")
+    assert prompts.WHICH_OF_THE_LIST_MESSAGE not in reply
+    written = reply + (llm.facts if llm.compose_calls else "")
+    assert expected in written
+    assert other not in written
+
+
+def test_cheapest_of_the_list_needs_a_list(make_service):
+    llm = FakeLLM(turn(price(only_cheapest=True)))
+    reply = make_service(llm).chat(SESSION, "quanto custa o mais barato?")
+    assert reply == prompts.WHICH_PRODUCT_MESSAGE
+
+
+def test_cheapest_of_the_list_skips_what_cannot_be_bought(make_service):
+    # Shelby SN-7C and Giannini GF-3D cannot be bought, and neither can be the answer.
+    llm = FakeLLM(
+        turn(search(product_query="Giannini")), turn(price(only_cheapest=True)), reply="ok"
+    )
+    service = make_service(llm)
+    service.chat(SESSION, "Giannini")
+    reply = service.chat(SESSION, "qual a mais barata?")
+    assert "Giannini GF-1R" in reply
+
+
+def test_price_of_something_that_cannot_be_bought_offers_alternatives(make_service):
+    # The manual asks for alternatives (section 7.3), and only a question about details got them.
+    llm = FakeLLM(turn(price(product_query="Giannini GF-3D")))
+    make_service(llm).chat(SESSION, "Quanto custa o Giannini GF-3D?")
+    assert '"alternatives"' in llm.facts
 
 
 def test_action_before_the_which_one_question_is_kept(make_service):
@@ -1778,18 +1903,20 @@ def test_fixed_message_goes_along_with_facts(make_service):
     assert reply == f"Resposta redigida.\n\n{prompts.EMAIL_REQUIRED_MESSAGE}"
 
 
-def test_only_two_actions_run_and_the_customer_is_told(make_service):
+def test_only_three_actions_run_and_the_customer_is_told(make_service):
     llm = FakeLLM(
         turn(
             store(StoreTopic.HOURS),
             store(StoreTopic.ADDRESS),
             store(StoreTopic.CONTACT),
+            policy("frete outra cidade"),
         )
     )
-    reply = make_service(llm).chat(SESSION, "Horário, endereço e contato?")
+    reply = make_service(llm).chat(SESSION, "Horário, endereço, contato e frete?")
     assert prompts.DROPPED_ACTIONS_MESSAGE in reply
     assert "Rua 14 de Maio" in llm.facts
-    assert "3321-4500" not in llm.facts
+    assert "3321-4500" in llm.facts
+    assert "Jadlog" not in llm.facts
 
 
 def test_model_is_called_at_most_twice_per_turn(make_service):

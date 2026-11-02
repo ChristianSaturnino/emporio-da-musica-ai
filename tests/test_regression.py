@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from emporio_ai.agent import prompts
-from emporio_ai.domain.errors import LLMOutputError, LLMUnavailableError
+from emporio_ai.domain.errors import LLMOutputError, LLMSetupError, LLMUnavailableError
 from emporio_ai.domain.schemas import ParsedTurn, StoreTopic
 from tests.helpers import OUT_OF_SCOPE, FakeLLM, details, order, policy, price, search, store, turn
 
@@ -168,6 +168,7 @@ def test_prompt_injection_gets_a_fixed_answer(make_service, owner_email, underst
     ("failure", "expected"),
     [
         (LLMUnavailableError("APIConnectionError"), prompts.PROVIDER_ERROR_MESSAGE),
+        (LLMSetupError("NotFoundError"), prompts.SETUP_ERROR_MESSAGE),
         (LLMOutputError("invalid JSON"), prompts.INVALID_OUTPUT_MESSAGE),
     ],
 )

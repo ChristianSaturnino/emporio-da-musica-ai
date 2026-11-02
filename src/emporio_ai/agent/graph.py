@@ -25,7 +25,7 @@ from emporio_ai.agent.llm import ChatMessage, LLMClient
 from emporio_ai.agent.state import ConversationState, OutcomeResult, ToolOutcome, TurnFailure
 from emporio_ai.data.policy_index import PolicyIndex
 from emporio_ai.data.repository import MAX_LIMIT, Repository
-from emporio_ai.domain.errors import LLMOutputError, LLMUnavailableError
+from emporio_ai.domain.errors import LLMOutputError, LLMSetupError, LLMUnavailableError
 from emporio_ai.domain.normalization import normalize_text, word_tokens
 from emporio_ai.domain.pricing import PIX_DISCOUNT_PERCENT, format_brl
 from emporio_ai.domain.schemas import (
@@ -61,7 +61,7 @@ from emporio_ai.tools.orders import get_order_status, get_verified_order
 from emporio_ai.tools.policies import search_policies
 from emporio_ai.tools.store import calendar_facts, get_store_information, today_in_store
 
-MAX_ACTIONS_PER_TURN = 2
+MAX_ACTIONS_PER_TURN = 3
 MAX_COMPARED_PRODUCTS = 3
 MAX_EXAMPLES = 3
 MAX_HISTORY_MESSAGES = 6
@@ -98,6 +98,11 @@ _NON_REQUESTS = frozenset({IntentType.GREETING, IntentType.OUT_OF_SCOPE})
 _SHOW_NO_PRODUCTS = frozenset({IntentType.OUT_OF_SCOPE, IntentType.HOW_TO_BUY})
 _PRODUCT_LOOKUPS = frozenset({IntentType.PRODUCT_DETAILS, IntentType.PRODUCT_PRICE})
 _CANNOT_CARRY_POLICY_TOPIC = _PRODUCT_LOOKUPS | {IntentType.PRODUCT_SEARCH, IntentType.ORDER_STATUS}
+_DEPENDS_ON_THE_PRODUCT = _PRODUCT_LOOKUPS | {
+    IntentType.PRODUCT_SEARCH,
+    IntentType.PRODUCT_COMPARISON,
+    IntentType.HOW_TO_BUY,
+}
 
 
 def _to_facts(value: Any) -> Any:
@@ -133,6 +138,7 @@ class _Turn:
     last_result_ids: list[int]
     pending_order_id: int | None
     verified_order_id: int | None
+    several_policy_questions: bool = False
 
 
 def _fixed(intent: IntentType, result: OutcomeResult, message: str) -> ToolOutcome:
@@ -238,6 +244,16 @@ def _which_one(turn: _Turn, action: ActionRequest, options: list[tuple[int, str]
     return _fixed(action.intent, OutcomeResult.NEEDS_INPUT, message)
 
 
+def _extreme_of_the_list(turn: _Turn, action: ActionRequest) -> int | None:
+    """Find the product of the last list that "a mais barata" or "a mais cara" points to."""
+    if not (action.only_cheapest or action.only_most_expensive) or not turn.last_result_ids:
+        return None
+    offers = [get_product_price(turn.repo, product_id=i).offer for i in turn.last_result_ids]
+    on_sale = [o for o in offers if o.availability is Availability.AVAILABLE] or offers
+    choose = max if action.only_most_expensive else min
+    return choose(on_sale, key=lambda offer: offer.quote.effective_price).product_id
+
+
 def _run_product_lookup(turn: _Turn, action: ActionRequest, lookup: Callable) -> ToolOutcome:
     if action.product_query and find_unsold_item(action.product_query):
         return _fixed(action.intent, OutcomeResult.BLOCKED, prompts.UNSOLD_ITEM_MESSAGE)
@@ -251,7 +267,11 @@ def _run_product_lookup(turn: _Turn, action: ActionRequest, lookup: Callable) ->
         if query
         else names_another_model(turn.repo, turn.user_message, turn.last_result_ids)
     )
+    # "Dessas, qual a mais barata?" was answered with "de qual destes você está falando?".
     position = action.position_in_list
+    extreme = None if outside_list or query else _extreme_of_the_list(turn, action)
+    if extreme is not None:
+        position = turn.last_result_ids.index(extreme) + 1
     chosen_from_list = (
         not outside_list and position is not None and 1 <= position <= len(turn.last_result_ids)
     )
@@ -328,7 +348,9 @@ def _price_sentence(offer: dict[str, Any], user_message: str) -> str:
 def _run_price(turn: _Turn, action: ActionRequest) -> ToolOutcome:
     # The model always wrote this same sentence, which took over a second and could only add risk.
     # Products that cannot be bought still go to the model, which has more to explain.
-    outcome = _run_product_lookup(turn, action, get_product_price)
+    # Details, because they hold the alternatives that the manual asks for (section 7.3). "Quanto
+    # custa o GF-3D?" only heard that it had no stock.
+    outcome = _run_product_lookup(turn, action, get_product_details)
     offer = (outcome.facts or {}).get("offer")
     if offer is None or offer["availability"] != Availability.AVAILABLE.value:
         return outcome
@@ -439,6 +461,10 @@ def _run_policy(turn: _Turn, action: ActionRequest) -> ToolOutcome:
     # Both, because a topic can lose the decisive word: "boquilha tem troca?" came back as "troca",
     # which missed the section saying mouthpieces cannot be exchanged.
     query = f"{action.policy_topic or ''} {turn.user_message}"
+    # But the message also holds the other questions, and they can fill every result. "Tem garantia?
+    # Entregam em Dourados? E parcelam em 12x?" got no section about the warranty.
+    if turn.several_policy_questions and action.policy_topic:
+        query = action.policy_topic
     result = search_policies(turn.policy_index, query)
     if not result.sections:
         return _fixed(action.intent, OutcomeResult.NO_RESULT, prompts.NO_POLICY_MESSAGE)
@@ -639,7 +665,10 @@ def _already_in_written_part(outcome: ToolOutcome, written: str | None) -> bool:
 def _facts_for_prompt(outcomes: list[ToolOutcome], already_told: list[ToolOutcome]) -> str:
     items = [{"intent": outcome.intent.value, "facts": outcome.facts} for outcome in outcomes]
     items += [
-        {"intent": outcome.intent.value, "already_in_reply": outcome.already_told}
+        {
+            "intent": outcome.intent.value,
+            "already_in_reply": outcome.already_told or {"message": outcome.message},
+        }
         for outcome in already_told
     ]
     # Retrieved text cannot close the tag around it, since "<" never appears literally.
@@ -655,6 +684,8 @@ def build_graph(
                 parsed = ParsedTurn(actions=[ActionRequest(intent=IntentType.GREETING)])
             else:
                 parsed = llm.parse_turn(_understand_messages(state, repo))
+        except LLMSetupError:
+            return {"failure": TurnFailure.SETUP_ERROR}
         except LLMUnavailableError:
             return {"failure": TurnFailure.PROVIDER_ERROR}
         except LLMOutputError:
@@ -719,7 +750,7 @@ def build_graph(
         actions = _clean_actions(actions)
         return {
             "actions": actions[:MAX_ACTIONS_PER_TURN],
-            "dropped_actions": len(actions) > MAX_ACTIONS_PER_TURN,
+            "dropped_actions": actions[MAX_ACTIONS_PER_TURN:],
         }
 
     def execute(state: ConversationState) -> dict[str, Any]:
@@ -732,10 +763,18 @@ def build_graph(
             last_result_ids=state.get("last_result_ids", []),
             pending_order_id=state.get("pending_order_id"),
             verified_order_id=state.get("verified_order_id"),
+            several_policy_questions=(
+                sum(a.intent is IntentType.POLICY_QUESTION for a in state["actions"]) > 1
+            ),
         )
         outcomes = []
         asked_which = False
         for action in state["actions"]:
+            # What depends on the product waits for the answer: "Quero a Fender" came with several
+            # actions, and each one asked the same question again. Anything else can still be
+            # answered: "Quanto custa a Fender e aceita boleto?" lost the part about boleto.
+            if asked_which and action.intent in _DEPENDS_ON_THE_PRODUCT:
+                continue
             handler = _HANDLERS[action.intent]
             started = time.perf_counter()
             error_type = None
@@ -757,18 +796,17 @@ def build_graph(
                 error_type=error_type,
             )
             outcomes.append(outcome)
-            # The rest depends on the answer. "Quero a Fender" came with several actions, and each
-            # one asked the same question again.
-            asked_which = (outcome.message or "").startswith(
+            asked_which = asked_which or (outcome.message or "").startswith(
                 (prompts.AMBIGUOUS_PRODUCT_MESSAGE, prompts.WHICH_OF_THE_LIST_MESSAGE)
             )
-            if asked_which:
-                break
         # Explaining how to buy right after declining an accessory contradicts the refusal.
         if any(outcome.message == prompts.UNSOLD_ITEM_MESSAGE for outcome in outcomes):
             outcomes = [o for o in outcomes if o.message != prompts.HOW_TO_BUY_MESSAGE]
+        dropped = state.get("dropped_actions", [])
+        if asked_which:
+            dropped = [a for a in dropped if a.intent not in _DEPENDS_ON_THE_PRODUCT]
         return {
-            "dropped_actions": state.get("dropped_actions", False) and not asked_which,
+            "dropped_actions": dropped,
             "outcomes": outcomes,
             "last_product_id": turn.last_product_id,
             "last_result_ids": turn.last_result_ids,
@@ -792,6 +830,8 @@ def build_graph(
 
     def _write_reply(state: ConversationState) -> tuple[str, TurnFailure | None]:
         failure = state.get("failure")
+        if failure is TurnFailure.SETUP_ERROR:
+            return prompts.SETUP_ERROR_MESSAGE, failure
         if failure is TurnFailure.PROVIDER_ERROR:
             return prompts.PROVIDER_ERROR_MESSAGE, failure
         if failure is TurnFailure.VALIDATION_ERROR:
@@ -808,7 +848,13 @@ def build_graph(
         # Fixed messages are added here rather than handed to the model, which reworded them and
         # once dropped a promotion's percentage. With nothing else to write, no call is spent.
         to_write = [outcome for outcome in outcomes if outcome.facts is not None]
-        already_told = [outcome for outcome in outcomes if outcome.already_told is not None]
+        # Fixed messages too. Next to a request for the email, the model wrote that it had no
+        # information about the order.
+        already_told = [
+            outcome
+            for outcome in outcomes
+            if outcome.facts is None and (outcome.already_told or outcome.message)
+        ]
         written = None
         if to_write:
             written, failure = _compose(state, to_write, already_told)
@@ -873,6 +919,8 @@ def build_graph(
         for _ in range(_COMPOSE_ATTEMPTS):
             try:
                 reply = llm.compose_reply(messages)
+            except LLMSetupError:
+                return prompts.SETUP_ERROR_MESSAGE, TurnFailure.SETUP_ERROR
             except LLMUnavailableError:
                 return prompts.PROVIDER_ERROR_MESSAGE, TurnFailure.PROVIDER_ERROR
             except LLMOutputError:

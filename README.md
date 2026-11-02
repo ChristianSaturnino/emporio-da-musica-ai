@@ -142,6 +142,10 @@ For a quick check without a browser, there is also a command-line chat:
 python main.py
 ```
 
+If OpenAI refuses the key, the model or a setting, or the account has no credit, the chat says which
+settings to check, and with Streamlit the terminal shows the error type. If your key cannot use
+`gpt-6-luna`, set `OPENAI_MODEL=gpt-4o-mini` in `.env`. It runs, and it scored lower when measured.
+
 Using the agent has a small cost. As an estimate, the last complete evaluation came to about
 US$ 0.0003 per conversation, most of them one to three messages, at the list prices of `gpt-6-luna`.
 This varies with the length of the messages and history and with retries, and nothing caps it.
@@ -219,20 +223,22 @@ conversation, though most only check the last, and a technical failure at any me
 exits with an error if a case fails or if the run was cut short. `--max-cost` is an
 estimate-based limit checked before each message, not a hard ceiling.
 
-In the latest complete run, **465 of 479 conversations passed**. Of the 14 failures, 5 were real, and 4
-of those were then addressed in code, with fake-model tests and without repeating the complete run. The
-others were 2 errors in the script itself, 5 acceptable replies that a check rejected, and 2 known
-trade-offs. A second technical review led to two later fixes, also with fake-model tests only.
+In the latest complete run, on the final code, **470 of 479 conversations passed**, up from 465 in the
+run before. Of the 9 failures, 2 were real, 5 were acceptable replies that a check rejected, and 2 were
+known trade-offs. A set written for a last audit, with 71 more conversations, scored 66 on its first run
+and 69 after the fixes it led to. Its 2 failures were real. The 4 real failures depend on how the model
+reads the message, and they are described in the report.
 
 | Set | Covers | First run | Latest complete run |
 | --- | --- | ---: | ---: |
+| `audit` | Context, model names, several requests, paraphrased policies | 66/71 | 69/71 |
 | `fixes` | Failures found by the technical review, with checks on some middle messages | 8/8 | 8/8 |
 | `clean` | Everyday questions | 32/34 | 34/34 |
-| `attack_final` | Prompt injection, with legitimate messages as controls | 19/19 | 19/19 |
+| `attack_final` | Prompt injection, with legitimate messages as controls | 19/19 | 17/19 |
 | `review_final` | Typos, price ranges, follow-ups, attempts to dictate prices | 36/36 | 36/36 |
-| `review_last` | Buying, withdrawing, warranty, mixed requests | 20/20 | 18/20 |
+| `review_last` | Buying, withdrawing, warranty, mixed requests | 20/20 | 20/20 |
 | `closing` | Everyday and edge cases | 18/20 | 20/20 |
-| `service` | Comparing products, questions about items, choosing by name | 32/32 | 33/35 |
+| `service` | Comparing products, questions about items, choosing by name | 32/32 | 35/35 |
 
 Each set was written before the code it first measured, but all of them came from the same process as
 the code, and they check for words. These are regression checks and not an independent benchmark. The
@@ -248,9 +254,9 @@ Real conversations, recorded by `scripts/record_examples.py` and not edited:
 4. [Order verification and prompt injection](examples/04_order_verification.md)
 5. [Several requests, and helping a customer choose](examples/05_multi_intent.md)
 
-All five were recorded before a last fix to how model numbers are told apart, which only has fake-model
-tests. Their amounts and tracking codes were checked against the database. A different run can word
-things differently.
+All five were recorded before the last two rounds of fixes, so they show an earlier version. Their
+amounts and tracking codes were checked against the database. A different run can word things
+differently.
 
 ## Design decisions and trade-offs
 
@@ -327,6 +333,7 @@ Current limitations:
 - **Results vary between runs.** The same message can be understood differently. For example, "Prazo de
   troca?" sometimes explains only the defect rule and leaves out the 7 days for preference, and "me ajuda
   a escolher uma guitarra" can ask about budget without showing the guitars.
+- **At most three requests per message.** Beyond that, the reply says so and asks for the rest.
 - **Hand-written word lists.** Accessory names and policy keywords are incomplete by nature.
 - **Hard-coded data fixes.** The six unreliable descriptions are listed by ID in the code.
 
@@ -371,8 +378,9 @@ This is how the work went:
 5. **Building one module at a time.** For each module, Claude Code implemented what we had agreed and
    ran the checks. I then reviewed all the code, tested it and asked for corrections where needed.
    Only then did I commit it and move on to the next one.
-6. **Reviewing before delivery.** I had **OpenAI Codex** do a separate technical review of the finished
-   project. I had each finding checked by reproducing it, and Claude Code made the corrections.
+6. **Review before delivery.** I used OpenAI Codex to assist with an independent technical review of
+   the project, helping validate its overall quality, identify potential improvements, and ensure
+   everything was ready for final submission.
 
 Claude Code sped up the implementation, tests and documentation drafts, while every decision and every
 commit went through me. Beyond the automated tests, I used the app as a customer would, and that is how

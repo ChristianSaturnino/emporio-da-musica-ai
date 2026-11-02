@@ -17,5 +17,9 @@ class LLMUnavailableError(Exception):
     """The model provider could not be reached or refused the request."""
 
 
+class LLMSetupError(LLMUnavailableError):
+    """The provider refused the key, the model or the account's credit, so retrying cannot help."""
+
+
 class LLMOutputError(Exception):
     """The model answered, but its output cannot be used."""

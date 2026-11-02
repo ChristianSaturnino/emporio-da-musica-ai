@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from emporio_ai.agent.llm import OpenAILLM
 from emporio_ai.agent.prompts import UNDERSTAND_SYSTEM_PROMPT
-from emporio_ai.domain.errors import LLMOutputError, LLMUnavailableError
+from emporio_ai.domain.errors import LLMOutputError, LLMSetupError, LLMUnavailableError
 from emporio_ai.domain.schemas import ActionRequest, IntentType, ParsedTurn
 
 PARSED = ParsedTurn(
@@ -206,3 +206,55 @@ def test_compose_reports_provider_failure():
     llm, _ = make_llm(api_error())
     with pytest.raises(LLMUnavailableError):
         llm.compose_reply(MESSAGES)
+
+
+# Setup problems
+
+
+def status_error(kind, status, code=None):
+    response = httpx.Response(status, request=httpx.Request("POST", "https://example.test"))
+    return kind("refused", response=response, body={"code": code} if code else None)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(status_error(openai.AuthenticationError, 401), id="bad-key"),
+        pytest.param(status_error(openai.NotFoundError, 404), id="unknown-model"),
+        pytest.param(status_error(openai.PermissionDeniedError, 403), id="no-access"),
+        pytest.param(status_error(openai.BadRequestError, 400), id="rejected-setting"),
+        pytest.param(
+            status_error(openai.RateLimitError, 429, code="insufficient_quota"), id="no-credit"
+        ),
+    ],
+)
+def test_setup_problems_are_told_apart(error):
+    # With a key that could not use the model, the person running it was told to try again.
+    for call in ("parse_turn", "compose_reply"):
+        llm, _ = make_llm(error)
+        with pytest.raises(LLMSetupError):
+            getattr(llm, call)(MESSAGES)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        api_error(),
+        status_error(openai.RateLimitError, 429),
+        status_error(openai.InternalServerError, 500),
+    ],
+    ids=["connection", "rate-limit", "server"],
+)
+def test_passing_problems_are_not_setup_problems(error):
+    llm, _ = make_llm(error)
+    with pytest.raises(LLMUnavailableError) as caught:
+        llm.parse_turn(MESSAGES)
+    assert not isinstance(caught.value, LLMSetupError)
+
+
+def test_provider_failure_logs_its_type_and_nothing_from_the_provider(caplog):
+    llm, _ = make_llm(status_error(openai.AuthenticationError, 401))
+    with caplog.at_level("ERROR", logger="emporio_ai.events"), pytest.raises(LLMSetupError):
+        llm.parse_turn(MESSAGES)
+    assert "AuthenticationError" in caplog.text
+    assert "refused" not in caplog.text

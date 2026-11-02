@@ -64,8 +64,8 @@ Neither step has direct access to the database. They only see what is listed her
 the last list shown. That conversation can hold prices and order details from earlier replies.
 
 **In `respond`:** the rules, the results of this turn in a `<dados>` block, the customer's last messages
-and its own previous reply. A price written by code in the same turn is included as `already_in_reply`,
-so the rest of the reply can agree with it. If the message was marked as partly off topic, it is
+and its own previous reply. A price or fixed message written by code in the same turn is included as
+`already_in_reply`, so the rest of the reply can agree with it. If the message was marked as partly off topic, it is
 withheld and replaced by its subject.
 
 ## Trade-offs
@@ -74,7 +74,7 @@ withheld and replaced by its subject.
   a path in code. Several fixes here were exactly that.
 - **Two model calls in a normal turn,** plus at most one retry for each if the output is unusable.
   This keeps cost and time predictable, and rules out multi-step reasoning. A message runs at most
-  two actions.
+  three actions, all written in the same call, and the reply says so if there were more.
 - **The reply check reads patterns.** It catches an amount or link that is nowhere in the data. It
   cannot judge whether a sentence is true, and a price attached to the wrong product passes.
 - **Everything is local and read-only.** It is easy to run and hard to break, and the data is a

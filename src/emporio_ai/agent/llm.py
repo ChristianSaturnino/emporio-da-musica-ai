@@ -1,12 +1,13 @@
 """Model provider adapter. The rest of the agent only knows the LLMClient protocol."""
 
+import logging
 import time
 from typing import Protocol
 
 import openai
 from pydantic import ValidationError
 
-from emporio_ai.domain.errors import LLMOutputError, LLMUnavailableError
+from emporio_ai.domain.errors import LLMOutputError, LLMSetupError, LLMUnavailableError
 from emporio_ai.domain.schemas import ParsedTurn
 from emporio_ai.observability.events import elapsed_ms, log_event
 
@@ -23,6 +24,13 @@ _MAX_REPLY_TOKENS = 1500
 # when null. Measured on the same messages: 30 output tokens instead of 102, and 1106 ms instead of
 # 1520 ms. ParsedTurn still validates the result, so nothing unchecked goes further.
 _JSON_OUTPUT = {"type": "json_object"}
+# The requests are fixed, so these point to the key, the model or a setting, not to a message.
+_SETUP_ERRORS = (
+    openai.AuthenticationError,
+    openai.BadRequestError,
+    openai.NotFoundError,
+    openai.PermissionDeniedError,
+)
 
 
 class LLMClient(Protocol):
@@ -43,6 +51,19 @@ def _log_usage(kind: str, completion: object, started: float) -> None:
             reasoning_tokens=getattr(details, "reasoning_tokens", None),
             latency_ms=elapsed_ms(started),
         )
+
+
+def _provider_error(exc: openai.APIError) -> LLMUnavailableError:
+    """Log the type and tell setup problems from passing ones.
+
+    Someone running this with a key that cannot use the model was told to try again in a moment,
+    and nothing in the logs said why.
+    """
+    error_type = type(exc).__name__
+    log_event("llm_failed", level=logging.ERROR, error_type=error_type)
+    if isinstance(exc, _SETUP_ERRORS) or getattr(exc, "code", None) == "insufficient_quota":
+        return LLMSetupError(error_type)
+    return LLMUnavailableError(error_type)
 
 
 class OpenAILLM:
@@ -80,7 +101,7 @@ class OpenAILLM:
                     **self._sampling_options(temperature=0),
                 )
             except openai.APIError as exc:
-                raise LLMUnavailableError(type(exc).__name__) from exc
+                raise _provider_error(exc) from exc
 
             _log_usage("parse", completion, started)
             try:
@@ -101,7 +122,7 @@ class OpenAILLM:
                 **self._sampling_options(temperature=0.3),
             )
         except openai.APIError as exc:
-            raise LLMUnavailableError(type(exc).__name__) from exc
+            raise _provider_error(exc) from exc
 
         _log_usage("compose", completion, started)
         choice = completion.choices[0]

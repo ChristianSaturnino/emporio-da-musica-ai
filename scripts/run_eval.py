@@ -53,6 +53,7 @@ SET_NAMES = (
     "closing",
     "service",
     "fixes",
+    "audit",
 )
 EXIT_OK = 0
 EXIT_CASES_FAILED = 1
@@ -68,6 +69,7 @@ PRICES_PER_MILLION = {
 # What a turn replies when something broke. A reply check does not count here, as it is not a fault.
 _TECHNICAL_FAILURE_MESSAGES = (
     prompts.PROVIDER_ERROR_MESSAGE,
+    prompts.SETUP_ERROR_MESSAGE,
     prompts.INVALID_OUTPUT_MESSAGE,
     prompts.TOOL_ERROR_MESSAGE,
     prompts.UNEXPECTED_ERROR_MESSAGE,

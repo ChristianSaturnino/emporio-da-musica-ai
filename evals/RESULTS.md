@@ -2,23 +2,76 @@
 
 ## Status of these numbers
 
-All scores come from `scripts/run_eval.py` against the real OpenAI API. There are three levels, and they
+All scores come from `scripts/run_eval.py` against the real OpenAI API. There are two levels, and they
 should not be mixed:
 
-- **Latest complete run:** prompt version 27, after the fixes from the final technical review. This is
-  the section below.
-- **After that run:** four small fixes, prompt version 28. They have tests with a fake model, and the
-  examples were recorded on this version, but the complete run was not repeated.
-- **After the second technical review:** model numbers such as "D-45" now tell products apart, `fx-03`
-  is stricter, and a technical failure fails any case. These have fake-model tests only. They have not
-  run on the real model, and the examples were not recorded again.
-- **Everything else in this report is historical,** from earlier versions on 2026-11-01. Those runs only
-  scored the last message of each conversation, and their cost limit was checked only between
-  conversations.
+- **Latest complete run:** prompt version 29, which is the final code, after the fixes from a last audit.
+  This is the section below. The examples were recorded earlier, on version 28.
+- **Everything else in this report is historical.** That includes the previous complete run on version
+  27, and the runs from 2026-11-01, which only scored the last message of each conversation and only
+  checked their cost limit between conversations.
 
 Costs here are estimates from list prices, not amounts billed.
 
 ## Latest complete run
+
+Prompt version 29, 550 conversations, on 2026-11-02. It completed without reaching the cost limit, at an
+estimated US$ 0.19. **Of the 479 conversations in the earlier sets, 470 passed and 9 failed. Of the 71 in
+the new `audit` set, 69 passed and 2 failed.** None failed validation and none hit a provider error. The
+reply check discarded one reply, on an attack (`a-03`). `fixes` and `audit` are the only sets with checks
+on messages other than the last, and only on some of them.
+
+| Set | Score | Set | Score |
+| --- | ---: | --- | ---: |
+| `dev` | 55/58 | `review` | 59/60 |
+| `heldout` | 43/44 | `review_final` | 36/36 |
+| `final` | 26/26 | `review_last` | 20/20 |
+| `shopper` | 32/32 | `closing` | 20/20 |
+| `fresh` | 29/30 | `service` | 35/35 |
+| `clean` | 34/34 | `attack` | 24/24 |
+| `calendar` | 7/7 | `attack_fresh` | 25/26 |
+| `fixes` | 8/8 | `attack_final` | 17/19 |
+| `audit` | 69/71 | | |
+
+Every failure was read:
+
+| Kind | Cases | What happened | Status |
+| --- | ---: | --- | --- |
+| Real | 4 | "Prazo de troca?" left out the 7 days for preference. A Saturday question mixed with an off-topic request got today's hours, as that message is withheld from the writing step. "E esse último?" asked which product. "Mudei de ideia sobre a compra" got the store's contacts and not the withdrawal rule | Still possible. Each one depends on how the model reads the message, and the last two passed the run before |
+| Check too strict | 5 | The replies were acceptable, but missed a word, or used an extra action or another intent. In `r-14`, the check forbids "no PIX", which now appears in the alternatives offered | Left as they are |
+| Trade-off | 2 | "Me conta uma piada de músico" and "me indica um advogado" do not get the plain refusal | Known and accepted |
+
+## The last audit
+
+The `audit` set was written for this audit, to look for context, model names, several requests in one
+message, paraphrased policies, unavailable products, promotions and missing order data. It scored 66/71
+on its first run, on version 28. As before, reading all the replies found more than the score did. All of
+these were reproduced before being fixed, and each has a fake-model test:
+
+- **A question was silently lost.** "Quanto custa a Fender e vocês aceitam boleto?" asked which Fender and
+  never mentioned boleto.
+- **The limit of two actions hurt everyday questions.** "Qual o endereço, o telefone e o horário?" came
+  with "não tenho a informação do horário", though the manual has it. All the results are written in one
+  call, so the limit is now three at no extra model call, and the reply says so if there were more.
+- **Questions competed for the same results.** "Tem garantia? Entregam em Dourados? E parcelam em 12x?"
+  asked which product, instead of giving the 90 days. Each policy question now searches its own topic.
+- **The writing step did not know about fixed messages.** After asking for the email, a reply went on to
+  say it had no information about the order. It now receives them, which removed that contradiction, but
+  it can still repeat the question.
+- **"Dessas, qual a mais barata?"** asked which product. The cheapest and dearest are now resolved in code.
+- **"O teclado parou de funcionar"** was treated as off topic. A prompt rule was added.
+- **"Parte no pix e parte no crédito"** was told the policies do not cover it, though section 3.1 does.
+  Keywords were added, which is the limit of lexical search showing again.
+- **"Quanto custa o GF-3D?"** said it had no stock, without the alternatives the manual asks for.
+- **A key that cannot use the model** was told to try again in a moment, and nothing in the logs said why.
+
+Checked by code against the CSV files, outside the test suite: list price, promotion, PIX and availability
+of all 65 products, and each of the 20 orders against its owner and every other customer's email. Nothing
+was wrong. After the fixes, the checks on `au-i01`, `au-i02`, `au-i03`, `au-i05`, `au-i07`, `au-c10` and
+`au-u01` were changed: the note about two answers no longer counts as an answer, and contradictions are
+now rejected. So 66 and 69 are not measured by exactly the same checks.
+
+## Previous complete run
 
 Prompt version 27, 479 conversations, on 2026-11-02. It completed without reaching the cost limit, at an
 estimated US$ 0.16. **465 passed and 14 failed. No reply was discarded by the reply check, none failed
@@ -41,9 +94,9 @@ Every failure was read:
 
 | Kind | Cases | What happened | Status |
 | --- | ---: | --- | --- |
-| Real | 3 | "Tem palheta?" got "tem sim", "boquilha tem troca?" got no answer, and "quero o Yamaha F310, como faço?" left out the price | Fixed in code, with fake-model tests only |
-| Real | 1 | After a comparison, "quero tocar música clássica" asked which product | Reduced: the question now lists the options, and a prompt rule was added |
-| Real | 1 | "Me ajuda a escolher uma guitarra" asked about budget and did not show the guitars | Still possible |
+| Real | 3 | "Tem palheta?" got "tem sim", "boquilha tem troca?" got no answer, and "quero o Yamaha F310, como faço?" left out the price | Fixed in code. All three passed the latest run |
+| Real | 1 | After a comparison, "quero tocar música clássica" asked which product | Reduced: the question now lists the options, and a prompt rule was added. Passed the latest run |
+| Real | 1 | "Me ajuda a escolher uma guitarra" asked about budget and did not show the guitars | Passed the latest run, but still possible |
 | Script | 2 | After a rewrite, the script kept the wrong text for its section check. The replies were correct | Fixed |
 | Check too strict | 5 | The replies were acceptable, but missed a word, or used an extra action or another intent | Left as they are |
 | Trade-off | 2 | "Me conta uma piada de músico" and "me indica um advogado" do not get the plain refusal | Known and accepted |
@@ -74,6 +127,7 @@ the same process, so they are still not independent.
 | `cases_closing.json` | Everyday and edge cases, before comparing products existed | 18/20 |
 | `cases_service.json` | Comparing products, questions about items, overview, choosing by name | 32/32 |
 | `cases_fixes.json` | The failures found by the technical review, with checks on some middle messages | 8/8 |
+| `cases_audit.json` | Context, model names, several requests, paraphrased policies, the last audit | 66/71 |
 
 The 2 failures in the closing set: "Martin D-28" was treated as ambiguous with the D-28E, a real bug
 fixed afterwards, and a comparison of two models answered correctly without restating their prices,
@@ -82,9 +136,9 @@ which the check asked for.
 ## Response time
 
 Measured on the same 60 messages of `cases_review.json`, on an earlier version. These are the same
-machine and connection, but the provider's speed also varies between runs. The latest complete run, with
-all sets and a different mix of messages, was slower: a median of 3.1 s per turn, with the slowest 10%
-from 6.1 s. A later prompt and a slower provider may both explain it, and this was not isolated.
+machine and connection, but the provider's speed also varies between runs. The complete runs have a
+different mix of messages. The latest had a median of 2.4 s per turn, with the slowest 10% from 3.1 s, and
+the one before it 3.1 s and 6.1 s. The provider may explain that difference, and this was not isolated.
 
 | | Median turn | Slowest 10% from | Interpreting (median) | Writing (median) |
 | --- | ---: | ---: | ---: | ---: |
@@ -159,6 +213,7 @@ request the first step fails to mark.
 | Faster, with the bugs from the review fixed | `gpt-6-luna` | 58/58 | 41/44 | 25/26 | 32/32 | 29/30 | 34/34 |
 | Comparing products, answering about items | `gpt-6-luna` | 57/58 | 44/44 | 26/26 | 32/32 | 29/30 | 34/34 |
 | After the technical review | `gpt-6-luna` | 55/58 | 40/44 | 25/26 | 32/32 | 29/30 | 34/34 |
+| After the last audit | `gpt-6-luna` | 55/58 | 43/44 | 26/26 | 32/32 | 29/30 | 34/34 |
 
 Only the 42/44 and the first 32/34 were measured before their sets could influence the code or the
 prompt. The rest show that nothing important broke, and say little about new questions.

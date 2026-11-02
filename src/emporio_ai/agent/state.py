@@ -9,6 +9,7 @@ from emporio_ai.domain.schemas import ActionRequest, IntentType
 
 class TurnFailure(StrEnum):
     PROVIDER_ERROR = "provider_error"
+    SETUP_ERROR = "setup_error"
     VALIDATION_ERROR = "validation_error"
     REPLY_REJECTED = "reply_rejected"
 
@@ -49,7 +50,7 @@ class ConversationState(TypedDict, total=False):
     user_message: str
     customer_email: str | None
     actions: list[ActionRequest]
-    dropped_actions: bool
+    dropped_actions: list[ActionRequest]
     needs_clarification: bool
     off_topic_part: bool
     failure: TurnFailure | None

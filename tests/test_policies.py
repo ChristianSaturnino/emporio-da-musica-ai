@@ -133,6 +133,19 @@ def test_question_finds_the_right_section(index, question, expected_first):
 
 
 @pytest.mark.parametrize(
+    "question",
+    [
+        "pagamento parcial em PIX e crédito",
+        "o instrumento pode ser pago parte no pix e parte no crédito?",
+        "Posso pagar metade no pix e metade no cartão?",
+    ],
+)
+def test_paying_in_two_ways_finds_the_rule_that_allows_it(index, question):
+    # Only the payment table came back, and the reply said the policies did not cover it.
+    assert "3.1" in section_ids(search_policies(index, question))
+
+
+@pytest.mark.parametrize(
     ("question", "expected_first"),
     [
         ("Comprei pela internet e não gostei, e agora?", "4.1"),

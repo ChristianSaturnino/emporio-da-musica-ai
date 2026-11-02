@@ -12,6 +12,7 @@ from emporio_ai.agent.prompts import (
     INVALID_OUTPUT_MESSAGE,
     OUT_OF_SCOPE_MESSAGE,
     PROVIDER_ERROR_MESSAGE,
+    SETUP_ERROR_MESSAGE,
     TOOL_ERROR_MESSAGE,
     UNDERSTAND_SYSTEM_PROMPT,
     UNEXPECTED_ERROR_MESSAGE,
@@ -302,6 +303,7 @@ def test_score_case_of_fx_03_rejects_the_provider_error_by_itself():
     [
         PROVIDER_ERROR_MESSAGE,
         f"O horário é das 9h às 18h.\n\n{PROVIDER_ERROR_MESSAGE}",
+        SETUP_ERROR_MESSAGE,
         INVALID_OUTPUT_MESSAGE,
         TOOL_ERROR_MESSAGE,
         UNEXPECTED_ERROR_MESSAGE,
